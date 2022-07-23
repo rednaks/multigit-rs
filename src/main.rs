@@ -71,8 +71,6 @@ async fn main() {
     };
 
     for repo_name in config.repos {
-        let repo = gh.get_repo(repo_name.as_str()).await;
-
         let branches: Vec<Value> = gh.list_branches(repo_name.as_str()).await;
 
         for branch in branches.iter() {

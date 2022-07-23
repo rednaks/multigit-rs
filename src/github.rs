@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use reqwest::header;
+use reqwest::{header, RequestBuilder};
 use serde_json::Value;
 
 pub struct Github {
@@ -17,64 +17,39 @@ pub enum CompareStatus {
 }
 
 impl Github {
+    fn add_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        req.header(header::AUTHORIZATION, format!("token {}", self.token))
+            .header(header::USER_AGENT, "MultiGitRs")
+            .header(header::ACCEPT, "application/vnd.github+json")
+    }
+
+    async fn send_and_parse(&self, req: RequestBuilder) -> String {
+        req.send().await.unwrap().text().await.unwrap()
+    }
+
     async fn get(&self, endpoint: String, params: Option<&[(&str, &str)]>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
-        let response = self
-            .client
-            .get(url)
-            .header(header::AUTHORIZATION, format!("token {}", self.token))
-            .header(header::USER_AGENT, "MultiGitRs")
-            .header(header::ACCEPT, "application/vnd.github+json")
-            .query(&params)
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
+        let req = self.client.get(url);
 
-        response
+        self.send_and_parse(self.add_headers(req).query(&params))
+            .await
     }
 
     async fn post(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
-        let response = self
-            .client
-            .post(url)
-            .header(header::AUTHORIZATION, format!("token {}", self.token))
-            .header(header::USER_AGENT, "MultiGitRs")
-            .header(header::ACCEPT, "application/vnd.github+json")
-            .json(&params)
-            .send()
+        let req = self.client.post(url);
+        self.send_and_parse(self.add_headers(req).json(&params))
             .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        response
     }
 
     async fn put(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
-        let response = self
-            .client
-            .put(url)
-            .header(header::AUTHORIZATION, format!("token {}", self.token))
-            .header(header::USER_AGENT, "MultiGitRs")
-            .header(header::ACCEPT, "application/vnd.github+json")
-            .json(&params)
-            .send()
+        let req = self.client.put(url);
+        self.send_and_parse(self.add_headers(req).json(&params))
             .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-
-        response
     }
 
     pub async fn list_repos(&self, is_user: &Option<bool>) -> Vec<Value> {
