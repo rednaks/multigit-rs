@@ -1,7 +1,16 @@
+cargo-features = ["strip"]
+
 [package]
 name = "multigit_rs"
 version = "0.1.0"
 edition = "2021"
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "s"  # Optimize for size.
+lto = true
+codegen-units = 1
+panic = "abort"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
