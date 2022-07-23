@@ -1,5 +1,5 @@
 mod github;
-use github::{CompareStatus, Github};
+use github::{CompareStatus, Github, MergeStatus};
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -104,9 +104,6 @@ async fn main() {
 
         let pull_request: Value = match comp {
             CompareStatus::Behind | CompareStatus::Diverged => {
-                // merge
-                // TODO: maybe check for conflicts.
-                // list open prs
                 let pulls: Vec<Value> = gh
                     .list_pulls(repo_name.as_str(), &args.from, &args.to)
                     .await;
@@ -128,13 +125,26 @@ async fn main() {
         };
 
         if args.merge {
-            let res = gh
+            let status = gh
                 .merge_pull(
                     repo_name.as_str(),
                     &pull_request["number"].as_u64().unwrap(),
                 )
                 .await;
-            println!("{}", res["message"].as_str().unwrap());
+
+            match status {
+                MergeStatus::Success => {
+                    if args.delete_branches {
+                        gh.delete_branches(repo_name.as_str(), &args.from).await;
+                    }
+                }
+                MergeStatus::Failed => {
+                    (println!(
+                        "Failed to merge #{} ",
+                        pull_request["number"].as_u64().unwrap()
+                    ))
+                }
+            }
         }
     }
 }

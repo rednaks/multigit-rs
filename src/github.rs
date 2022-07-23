@@ -16,6 +16,11 @@ pub enum CompareStatus {
     Identical,
 }
 
+pub enum MergeStatus {
+    Success,
+    Failed,
+}
+
 impl Github {
     fn add_headers(&self, req: RequestBuilder) -> RequestBuilder {
         req.header(header::AUTHORIZATION, format!("token {}", self.token))
@@ -48,6 +53,14 @@ impl Github {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.put(url);
+        self.send_and_parse(self.add_headers(req).json(&params))
+            .await
+    }
+
+    async fn delete(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
+        let url = format!("https://api.github.com/{}", endpoint);
+
+        let req = self.client.delete(url);
         self.send_and_parse(self.add_headers(req).json(&params))
             .await
     }
@@ -121,11 +134,23 @@ impl Github {
         serde_json::from_str::<Value>(&response).unwrap()
     }
 
-    pub async fn merge_pull(&self, repo: &str, pull_number: &u64) -> Value {
+    pub async fn merge_pull(&self, repo: &str, pull_number: &u64) -> MergeStatus {
         let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
 
         let response = self.put(endpoint, None).await;
 
-        serde_json::from_str::<Value>(&response).unwrap()
+        let parsed = serde_json::from_str::<Value>(&response).unwrap();
+
+        match parsed["merged"].as_bool().unwrap_or(false) {
+            true => MergeStatus::Success,
+            false => MergeStatus::Failed,
+        }
+    }
+
+    pub async fn delete_branches(&self, repo: &str, branch: &str) {
+        let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo, branch);
+
+        let res = self.delete(endpoint, None).await;
+        println!("{}", res);
     }
 }
