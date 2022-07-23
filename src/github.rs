@@ -1,0 +1,156 @@
+use std::collections::HashMap;
+
+use reqwest::header;
+use serde_json::Value;
+
+pub struct Github {
+    pub client: reqwest::Client,
+    pub owner: String,
+    pub token: String,
+}
+
+pub enum CompareStatus {
+    Ahead,
+    Behind,
+    Diverged,
+    Identical,
+}
+
+impl Github {
+    async fn get(&self, endpoint: String, params: Option<&[(&str, &str)]>) -> String {
+        let url = format!("https://api.github.com/{}", endpoint);
+
+        let response = self
+            .client
+            .get(url)
+            .header(header::AUTHORIZATION, format!("token {}", self.token))
+            .header(header::USER_AGENT, "MultiGitRs")
+            .header(header::ACCEPT, "application/vnd.github+json")
+            .query(&params)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        response
+    }
+
+    async fn post(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
+        let url = format!("https://api.github.com/{}", endpoint);
+
+        let response = self
+            .client
+            .post(url)
+            .header(header::AUTHORIZATION, format!("token {}", self.token))
+            .header(header::USER_AGENT, "MultiGitRs")
+            .header(header::ACCEPT, "application/vnd.github+json")
+            .json(&params)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        response
+    }
+
+    async fn put(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
+        let url = format!("https://api.github.com/{}", endpoint);
+
+        let response = self
+            .client
+            .put(url)
+            .header(header::AUTHORIZATION, format!("token {}", self.token))
+            .header(header::USER_AGENT, "MultiGitRs")
+            .header(header::ACCEPT, "application/vnd.github+json")
+            .json(&params)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        response
+    }
+
+    pub async fn list_repos(&self, is_user: &Option<bool>) -> Vec<Value> {
+        let mut endpoint = format!("orgs/{}/repos", self.owner);
+        if is_user.unwrap_or(false) {
+            endpoint = format!("users/{}/repos", self.owner);
+        }
+
+        let response = self.get(endpoint, None).await;
+
+        serde_json::from_str::<Vec<Value>>(&response).unwrap()
+    }
+
+    pub async fn get_repo(&self, repo: &str) -> Value {
+        let endpoint: String = format!("repos/{}/{}", self.owner, repo);
+        let response = self.get(endpoint, None).await;
+
+        serde_json::from_str::<Value>(&response).unwrap()
+    }
+
+    pub async fn list_branches(&self, repo: &str) -> Vec<Value> {
+        let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
+
+        let response = self.get(endpoint, None).await;
+
+        serde_json::from_str::<Vec<Value>>(&response).unwrap()
+    }
+
+    pub async fn compare(&self, repo: &str, base: &str, head: &str) -> CompareStatus {
+        let endpoint = format!("repos/{}/{}/compare/{}...{}", self.owner, repo, base, head);
+
+        let response = self.get(endpoint, None).await;
+
+        let parsed = serde_json::from_str::<Value>(&response).unwrap();
+
+        // compare don't show when refs are conflicting.
+
+        match parsed["status"].as_str().unwrap() {
+            "ahead" => CompareStatus::Ahead,
+            "behind" => CompareStatus::Behind,
+            "diverged" => CompareStatus::Diverged,
+            "identical" => CompareStatus::Identical,
+            _ => {
+                panic!("Comparision not handleld !")
+            }
+        }
+    }
+
+    pub async fn list_pulls(&self, repo: &str, from: &str, to: &str) -> Vec<Value> {
+        let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
+        let response = self
+            .get(
+                endpoint,
+                Some(&[("state", "open"), ("head", from), ("base", to)]),
+            )
+            .await;
+
+        serde_json::from_str::<Vec<Value>>(&response).unwrap()
+    }
+
+    pub async fn create_pull(&self, repo: &str, from: &str, to: &str) -> Value {
+        let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
+        let mut params = HashMap::new();
+        params.insert("base", from);
+        params.insert("head", to);
+
+        let response = self.post(endpoint, Some(params)).await;
+
+        serde_json::from_str::<Value>(&response).unwrap()
+    }
+
+    pub async fn merge_pull(&self, repo: &str, pull_number: &u64) -> Value {
+        let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
+
+        let response = self.put(endpoint, None).await;
+
+        serde_json::from_str::<Value>(&response).unwrap()
+    }
+}
