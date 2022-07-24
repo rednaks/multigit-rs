@@ -72,14 +72,14 @@ async fn main() {
     };
 
     for repo_name in config.repos {
-        let branches: Vec<Value> = gh.list_branches(repo_name.as_str()).await;
+        let branches: Vec<Value> = gh.list_branches(&repo_name).await;
 
         for branch in branches.iter() {
             println!("branch: {}", branch["name"]);
         }
 
         if !check_branch_in(&args.from, &branches) {
-            panic!(
+            eprintln!(
                 "Source Branch {} doesn't exist for repo {}",
                 args.from, repo_name
             );
@@ -88,12 +88,12 @@ async fn main() {
         if !check_branch_in(&args.to, &branches) {
             if args.create_branches {
                 // TODO
-                panic!(
+                eprintln!(
                     "Destination Branch {} doesn't exist for repo {}.",
                     args.from, repo_name
                 );
             } else {
-                panic!(
+                eprintln!(
                     r#"Destination Branch {} doesn't exist for repo {}.
                 Use --create-branches to create it or create it manually on gh."#,
                     args.from, repo_name
@@ -107,16 +107,13 @@ async fn main() {
 
         let pull_request: Value = match comp {
             CompareStatus::Behind | CompareStatus::Diverged => {
-                let pulls: Vec<Value> = gh
-                    .list_pulls(repo_name.as_str(), &args.from, &args.to)
-                    .await;
+                let pulls: Vec<Value> = gh.list_pulls(&repo_name, &args.from, &args.to).await;
 
                 if pulls.len() > 0 {
                     // TODO: is there a better way ?
                     serde_json::from_str::<Value>(pulls[0].to_string().as_str()).unwrap()
                 } else if args.create {
-                    gh.create_pull(repo_name.as_str(), &args.from, &args.to)
-                        .await
+                    gh.create_pull(&repo_name, &args.from, &args.to).await
                 } else {
                     serde_json::json!(null)
                 }
@@ -129,23 +126,20 @@ async fn main() {
 
         if args.merge {
             let status = gh
-                .merge_pull(
-                    repo_name.as_str(),
-                    &pull_request["number"].as_u64().unwrap(),
-                )
+                .merge_pull(&repo_name, &pull_request["number"].as_u64().unwrap())
                 .await;
 
             match status {
                 MergeStatus::Success => {
                     if args.delete_branches {
-                        gh.delete_branches(repo_name.as_str(), &args.from).await;
+                        gh.delete_branches(&repo_name, &args.from).await;
                     }
                 }
                 MergeStatus::Failed => {
-                    (println!(
+                    eprintln!(
                         "Failed to merge #{} ",
                         pull_request["number"].as_u64().unwrap()
-                    ))
+                    )
                 }
             }
         }

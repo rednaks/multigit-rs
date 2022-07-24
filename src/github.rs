@@ -32,7 +32,7 @@ impl Github {
         req.send().await.unwrap().text().await.unwrap()
     }
 
-    async fn get(&self, endpoint: String, params: Option<&[(&str, &str)]>) -> String {
+    async fn get(&self, endpoint: String, params: Option<&[(&String, &String)]>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.get(url);
@@ -41,7 +41,7 @@ impl Github {
             .await
     }
 
-    async fn post(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
+    async fn post(&self, endpoint: String, params: Option<HashMap<String, &String>>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.post(url);
@@ -49,7 +49,7 @@ impl Github {
             .await
     }
 
-    async fn put(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
+    async fn put(&self, endpoint: String, params: Option<HashMap<String, &String>>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.put(url);
@@ -57,7 +57,7 @@ impl Github {
             .await
     }
 
-    async fn delete(&self, endpoint: String, params: Option<HashMap<&str, &str>>) -> String {
+    async fn delete(&self, endpoint: String, params: Option<HashMap<String, &String>>) -> String {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.delete(url);
@@ -76,14 +76,14 @@ impl Github {
         serde_json::from_str::<Vec<Value>>(&response).unwrap()
     }
 
-    pub async fn get_repo(&self, repo: &str) -> Value {
+    pub async fn get_repo(&self, repo: &String) -> Value {
         let endpoint: String = format!("repos/{}/{}", self.owner, repo);
         let response = self.get(endpoint, None).await;
 
         serde_json::from_str::<Value>(&response).unwrap()
     }
 
-    pub async fn list_branches(&self, repo: &str) -> Vec<Value> {
+    pub async fn list_branches(&self, repo: &String) -> Vec<Value> {
         let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
 
         let response = self.get(endpoint, None).await;
@@ -91,7 +91,7 @@ impl Github {
         serde_json::from_str::<Vec<Value>>(&response).unwrap()
     }
 
-    pub async fn compare(&self, repo: &str, base: &str, head: &str) -> CompareStatus {
+    pub async fn compare(&self, repo: &String, base: &String, head: &String) -> CompareStatus {
         let endpoint = format!("repos/{}/{}/compare/{}...{}", self.owner, repo, base, head);
 
         let response = self.get(endpoint, None).await;
@@ -111,30 +111,34 @@ impl Github {
         }
     }
 
-    pub async fn list_pulls(&self, repo: &str, from: &str, to: &str) -> Vec<Value> {
+    pub async fn list_pulls(&self, repo: &String, from: &String, to: &String) -> Vec<Value> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let response = self
             .get(
                 endpoint,
-                Some(&[("state", "open"), ("head", from), ("base", to)]),
+                Some(&[
+                    (&String::from("state"), &String::from("open")),
+                    (&String::from("head"), from),
+                    (&String::from("base"), to),
+                ]),
             )
             .await;
 
         serde_json::from_str::<Vec<Value>>(&response).unwrap()
     }
 
-    pub async fn create_pull(&self, repo: &str, from: &str, to: &str) -> Value {
+    pub async fn create_pull(&self, repo: &String, from: &String, to: &String) -> Value {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
-        let mut params = HashMap::new();
-        params.insert("base", from);
-        params.insert("head", to);
+        let mut params = HashMap::<String, &String>::with_capacity(2);
+        params.insert(String::from("base"), from);
+        params.insert(String::from("head"), to);
 
         let response = self.post(endpoint, Some(params)).await;
 
         serde_json::from_str::<Value>(&response).unwrap()
     }
 
-    pub async fn merge_pull(&self, repo: &str, pull_number: &u64) -> MergeStatus {
+    pub async fn merge_pull(&self, repo: &String, pull_number: &u64) -> MergeStatus {
         let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
 
         let response = self.put(endpoint, None).await;
@@ -147,7 +151,7 @@ impl Github {
         }
     }
 
-    pub async fn delete_branches(&self, repo: &str, branch: &str) {
+    pub async fn delete_branches(&self, repo: &String, branch: &String) {
         let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo, branch);
 
         let res = self.delete(endpoint, None).await;
