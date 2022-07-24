@@ -2,6 +2,7 @@ mod github;
 use github::{CompareStatus, Github, MergeStatus};
 
 use clap::Parser;
+use exitcode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -97,6 +98,8 @@ async fn main() {
                 Use --create-branches to create it or create it manually on gh."#,
                     args.from, repo_name
                 );
+
+                std::process::exit(exitcode::CONFIG);
             }
         }
 
