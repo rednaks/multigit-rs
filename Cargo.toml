@@ -16,6 +16,7 @@ panic = "abort"
 
 [dependencies]
 clap = { version = "3.2.6", features = ["derive"] }
+exitcode = "1.1.2"
 reqwest = { version = "0.11.11", features = ["json"] }
 serde = { version = "1.0.140", features = ["derive"] }
 serde_json = "1.0.81"
