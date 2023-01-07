@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use log::debug;
+use log::error;
 use reqwest::{header, RequestBuilder};
 use serde_json::Value;
 
@@ -9,6 +11,7 @@ pub struct Github {
     pub token: String,
 }
 
+#[derive(Debug)]
 pub enum CompareStatus {
     Ahead,
     Behind,
@@ -100,13 +103,18 @@ impl Github {
 
         // compare don't show when refs are conflicting.
 
-        match parsed["status"].as_str().unwrap() {
-            "ahead" => CompareStatus::Ahead,
-            "behind" => CompareStatus::Behind,
-            "diverged" => CompareStatus::Diverged,
-            "identical" => CompareStatus::Identical,
-            _ => {
-                panic!("Comparision not handleld !")
+        match parsed["status"].as_str() {
+            Some(a_status) => match a_status {
+                "ahead" => CompareStatus::Ahead,
+                "behind" => CompareStatus::Behind,
+                "diverged" => CompareStatus::Diverged,
+                "identical" => CompareStatus::Identical,
+                _ => {
+                    panic!("Comparision not handleld !")
+                }
+            },
+            None => {
+                panic!("No status returned !");
             }
         }
     }
@@ -127,11 +135,19 @@ impl Github {
         serde_json::from_str::<Vec<Value>>(&response).unwrap()
     }
 
-    pub async fn create_pull(&self, repo: &String, from: &String, to: &String) -> Value {
+    pub async fn create_pull(
+        &self,
+        repo: &String,
+        from: &String,
+        to: &String,
+        reference: &String,
+    ) -> Value {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let mut params = HashMap::<String, &String>::with_capacity(2);
-        params.insert(String::from("base"), from);
-        params.insert(String::from("head"), to);
+        let title: String = format!("PR for: {}. {} into {}", reference, from, to);
+        params.insert(String::from("title"), &title);
+        params.insert(String::from("base"), to);
+        params.insert(String::from("head"), from);
 
         let response = self.post(endpoint, Some(params)).await;
 
@@ -155,6 +171,6 @@ impl Github {
         let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo, branch);
 
         let res = self.delete(endpoint, None).await;
-        println!("{}", res);
+        debug!("{}", res);
     }
 }
