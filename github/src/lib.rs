@@ -1,9 +1,8 @@
 mod response;
-use response::GithubRepo;
+pub use response::{GithubBranch, GithubRepo};
 use std::collections::HashMap;
 
 use log::debug;
-use log::error;
 use reqwest::{header, RequestBuilder};
 use serde_json::Value;
 
@@ -95,12 +94,12 @@ impl Github {
         serde_json::from_str::<Value>(&response).unwrap()
     }
 
-    pub async fn list_branches(&self, repo: &String) -> Vec<Value> {
+    pub async fn list_branches(&self, repo: &String) -> Vec<GithubBranch> {
         let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
 
         let response = self.get(endpoint, None).await;
 
-        serde_json::from_str::<Vec<Value>>(&response).unwrap()
+        serde_json::from_str::<Vec<GithubBranch>>(&response).unwrap()
     }
 
     pub async fn compare_branches(

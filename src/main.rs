@@ -1,7 +1,7 @@
 use clap::Parser;
 use config::{load_config, Config};
 use exitcode;
-use github::{CompareStatus, Github, MergeStatus};
+use github::{CompareStatus, Github, GithubBranch, MergeStatus};
 use log::debug;
 use log::error;
 use log::info;
@@ -16,7 +16,6 @@ struct Aargs {
     #[clap(long, value_parser)]
     /// destination branch to create pull request
     to: String,
-
     #[clap(long, value_parser)]
     /// reference branch: org/project#issue_number
     reference: String,
@@ -38,11 +37,11 @@ struct Aargs {
     delete_branches: bool,
 }
 
-fn check_branch_in(branch_name: &String, branches: &Vec<Value>) -> bool {
+fn check_branch_in(branch_name: &String, branches: &Vec<GithubBranch>) -> bool {
     branches
         .iter()
-        .map(|b| b["name"].as_str())
-        .any(|b_name| b_name.unwrap() == branch_name.as_str())
+        .map(|b| b.name.clone())
+        .any(|b_name| b_name == branch_name.as_str())
 }
 
 #[tokio::main]
@@ -62,10 +61,10 @@ async fn main() {
     let gh = Github::new(config.token, config.org_name);
 
     for repo_name in config.repos {
-        let branches: Vec<Value> = gh.list_branches(&repo_name).await;
+        let branches: Vec<GithubBranch> = gh.list_branches(&repo_name).await;
 
         for branch in branches.iter() {
-            debug!("branch: {}", branch["name"]);
+            debug!("branch: {}", branch.name);
         }
 
         if !check_branch_in(&args.from, &branches) {
