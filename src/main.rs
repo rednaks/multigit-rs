@@ -1,14 +1,11 @@
-mod github;
+use clap::Parser;
+use config::{load_config, Config};
+use exitcode;
 use github::{CompareStatus, Github, MergeStatus};
 use log::debug;
 use log::error;
 use log::info;
-
-use clap::Parser;
-use exitcode;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
 #[derive(Parser, Debug)]
 #[clap(author, version, long_about=None)]
 struct Aargs {
@@ -41,30 +38,11 @@ struct Aargs {
     delete_branches: bool,
 }
 
-#[derive(Deserialize, Serialize)]
-struct Config {
-    token: String,
-    org_name: String,
-    is_user: bool,
-    repos: Vec<String>,
-}
-
 fn check_branch_in(branch_name: &String, branches: &Vec<Value>) -> bool {
     branches
         .iter()
         .map(|b| b["name"].as_str())
         .any(|b_name| b_name.unwrap() == branch_name.as_str())
-}
-
-fn load_config() -> Result<Config, ()> {
-    let text = std::fs::read_to_string("config.json").expect("Err");
-    match serde_json::from_str(&text) {
-        Ok(config) => Ok(config),
-        Err(e) => {
-            error!("Unable to load config: {:?}", e);
-            Err(())
-        }
-    }
 }
 
 #[tokio::main]
@@ -80,11 +58,7 @@ async fn main() {
 
     info!("Managing {}", config.org_name);
 
-    let gh = Github {
-        client: reqwest::Client::new(),
-        token: config.token,
-        owner: config.org_name,
-    };
+    let gh = Github::new(config.token, config.org_name);
 
     for repo_name in config.repos {
         let branches: Vec<Value> = gh.list_branches(&repo_name).await;
@@ -118,7 +92,7 @@ async fn main() {
             }
         }
 
-        let comp = gh.compare(&repo_name, &args.to, &args.from).await;
+        let comp = gh.compare_branches(&repo_name, &args.to, &args.from).await;
         debug!(
             "{} comp {} and {}: {:?}",
             repo_name, args.to, args.from, comp

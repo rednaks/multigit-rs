@@ -12,14 +12,20 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
+[workspace]
+members = [
+  ".",
+  "github",
+  "config"
+]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = { version = "3.2.6", features = ["derive"] }
 env_logger = "0.10.0"
 exitcode = "1.1.2"
+github = { version = "0.1.0", path = "./github" }
+config = { version = "0.1.0", path = "./config" }
 log = "0.4.17"
-reqwest = { version = "0.11.11", features = ["json"] }
-serde = { version = "1.0.140", features = ["derive"] }
 serde_json = "1.0.81"
 tokio = { version = "1.19.2", features = ["full"] }

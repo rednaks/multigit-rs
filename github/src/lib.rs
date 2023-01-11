@@ -1,3 +1,5 @@
+mod response;
+use response::GithubRepo;
 use std::collections::HashMap;
 
 use log::debug;
@@ -25,6 +27,13 @@ pub enum MergeStatus {
 }
 
 impl Github {
+    pub fn new(token: String, owner: String) -> Github {
+        Github {
+            client: reqwest::Client::new(),
+            token,
+            owner,
+        }
+    }
     fn add_headers(&self, req: RequestBuilder) -> RequestBuilder {
         req.header(header::AUTHORIZATION, format!("token {}", self.token))
             .header(header::USER_AGENT, "MultiGitRs")
@@ -68,7 +77,7 @@ impl Github {
             .await
     }
 
-    pub async fn list_repos(&self, is_user: &Option<bool>) -> Vec<Value> {
+    pub async fn list_repos(&self, is_user: &Option<bool>) -> Vec<GithubRepo> {
         let mut endpoint = format!("orgs/{}/repos", self.owner);
         if is_user.unwrap_or(false) {
             endpoint = format!("users/{}/repos", self.owner);
@@ -76,7 +85,7 @@ impl Github {
 
         let response = self.get(endpoint, None).await;
 
-        serde_json::from_str::<Vec<Value>>(&response).unwrap()
+        serde_json::from_str::<Vec<GithubRepo>>(&response).unwrap()
     }
 
     pub async fn get_repo(&self, repo: &String) -> Value {
@@ -94,7 +103,12 @@ impl Github {
         serde_json::from_str::<Vec<Value>>(&response).unwrap()
     }
 
-    pub async fn compare(&self, repo: &String, base: &String, head: &String) -> CompareStatus {
+    pub async fn compare_branches(
+        &self,
+        repo: &String,
+        base: &String,
+        head: &String,
+    ) -> CompareStatus {
         let endpoint = format!("repos/{}/{}/compare/{}...{}", self.owner, repo, base, head);
 
         let response = self.get(endpoint, None).await;
