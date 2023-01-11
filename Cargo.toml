@@ -27,5 +27,4 @@ exitcode = "1.1.2"
 github = { version = "0.1.0", path = "./github" }
 config = { version = "0.1.0", path = "./config" }
 log = "0.4.17"
-serde_json = "1.0.81"
 tokio = { version = "1.19.2", features = ["full"] }

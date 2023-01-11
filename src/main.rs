@@ -1,11 +1,11 @@
 use clap::Parser;
 use config::{load_config, Config};
 use exitcode;
-use github::{CompareStatus, Github, GithubBranch, MergeStatus};
+use github::{CompareStatus, Github, GithubBranch, GithubPullRequest, MergeStatus};
 use log::debug;
 use log::error;
 use log::info;
-use serde_json::Value;
+
 #[derive(Parser, Debug)]
 #[clap(author, version, long_about=None)]
 struct Aargs {
@@ -61,7 +61,17 @@ async fn main() {
     let gh = Github::new(config.token, config.org_name);
 
     for repo_name in config.repos {
-        let branches: Vec<GithubBranch> = gh.list_branches(&repo_name).await;
+        let branches: Vec<GithubBranch> = match gh.list_branches(&repo_name).await {
+            Some(branches) => branches,
+            None => {
+                error!(
+                    "Couldn't get branches for repo {:?}. Skipping ...",
+                    &repo_name
+                );
+                // TODO: should we skip or abort ?
+                continue;
+            }
+        };
 
         for branch in branches.iter() {
             debug!("branch: {}", branch.name);
@@ -98,48 +108,60 @@ async fn main() {
             repo_name, args.to, args.from, comp
         );
 
-        let pull_request: Value = match comp {
+        let pull_request: Option<GithubPullRequest> = match comp {
             CompareStatus::Behind | CompareStatus::Diverged => {
-                let pulls: Vec<Value> = gh.list_pulls(&repo_name, &args.from, &args.to).await;
+                let pulls: Vec<GithubPullRequest> =
+                    match gh.list_pulls(&repo_name, &args.from, &args.to).await {
+                        Some(pulls) => pulls,
+                        None => {
+                            error!("Unable to get pull requests for repo {:?}", &repo_name);
+                            // TODO: how should this be handled ?
+                            std::process::exit(-1);
+                        }
+                    };
 
                 if pulls.len() > 0 {
                     // TODO: is there a better way ?
                     info!("PRs already exists ?: {:?}", pulls);
-                    serde_json::from_str::<Value>(pulls[0].to_string().as_str()).unwrap()
+                    Some(pulls[0].clone())
                 } else if args.create {
                     info!("Creating pull request for repo {}", repo_name);
                     gh.create_pull(&repo_name, &args.from, &args.to, &args.reference)
                         .await
                 } else {
-                    serde_json::json!(null)
+                    None
                 }
             }
             _ => {
                 info!("Nothing to merge !");
-                serde_json::json!(null)
+                None
             }
         };
 
         debug!("PR: {:?}", pull_request);
 
-        if args.merge {
-            let status = gh
-                .merge_pull(&repo_name, &pull_request["number"].as_u64().unwrap())
-                .await;
-
-            match status {
-                MergeStatus::Success => {
-                    if args.delete_branches {
-                        gh.delete_branches(&repo_name, &args.from).await;
+        match pull_request {
+            Some(pr) => {
+                if !args.merge {
+                    info!("Merge not requested, nothing to do !");
+                    std::process::exit(0);
+                }
+                let merge_status = gh.merge_pull(&repo_name, &pr.number).await;
+                match merge_status {
+                    MergeStatus::Success => {
+                        if args.delete_branches {
+                            gh.delete_branches(&repo_name, &args.from).await;
+                        }
+                    }
+                    MergeStatus::Failed => {
+                        error!("Failed to merge #{} ", pr.number)
                     }
                 }
-                MergeStatus::Failed => {
-                    error!(
-                        "Failed to merge #{} ",
-                        pull_request["number"].as_u64().unwrap()
-                    )
-                }
+            }
+            None => {
+                //
             }
         }
+        if args.merge {}
     }
 }

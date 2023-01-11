@@ -1,5 +1,5 @@
 mod response;
-pub use response::{GithubBranch, GithubRepo};
+pub use response::{GithubBranch, GithubPullRequest, GithubRepo};
 use std::collections::HashMap;
 
 use log::debug;
@@ -87,19 +87,32 @@ impl Github {
         serde_json::from_str::<Vec<GithubRepo>>(&response).unwrap()
     }
 
-    pub async fn get_repo(&self, repo: &String) -> Value {
+    pub async fn get_repo(&self, repo: &String) -> Option<GithubRepo> {
         let endpoint: String = format!("repos/{}/{}", self.owner, repo);
         let response = self.get(endpoint, None).await;
 
-        serde_json::from_str::<Value>(&response).unwrap()
+        match serde_json::from_str::<GithubRepo>(&response) {
+            Ok(repo) => Some(repo),
+            Err(e) => {
+                println!("Unable to get repo : {:?}: {:?}", repo, e);
+                None
+            }
+        }
     }
 
-    pub async fn list_branches(&self, repo: &String) -> Vec<GithubBranch> {
+    pub async fn list_branches(&self, repo: &String) -> Option<Vec<GithubBranch>> {
         let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
 
         let response = self.get(endpoint, None).await;
 
-        serde_json::from_str::<Vec<GithubBranch>>(&response).unwrap()
+        match serde_json::from_str::<Vec<GithubBranch>>(&response) {
+            Ok(branches) => Some(branches),
+            Err(e) => {
+                println!("Error: Unable to get branches: {:?}", e);
+                println!("Response: {:?}", response);
+                None
+            }
+        }
     }
 
     pub async fn compare_branches(
@@ -132,7 +145,12 @@ impl Github {
         }
     }
 
-    pub async fn list_pulls(&self, repo: &String, from: &String, to: &String) -> Vec<Value> {
+    pub async fn list_pulls(
+        &self,
+        repo: &String,
+        from: &String,
+        to: &String,
+    ) -> Option<Vec<GithubPullRequest>> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let response = self
             .get(
@@ -145,7 +163,18 @@ impl Github {
             )
             .await;
 
-        serde_json::from_str::<Vec<Value>>(&response).unwrap()
+        let deserializer = &mut serde_json::Deserializer::from_str(&response);
+        let result: Result<Vec<GithubPullRequest>, _> =
+            serde_path_to_error::deserialize(deserializer);
+
+        match result {
+            Ok(pull_requests) => Some(pull_requests),
+            Err(e) => {
+                println!("Unable to get list of pull requests: {}", e);
+                // println!("Response: {:?}", &response);
+                None
+            }
+        }
     }
 
     pub async fn create_pull(
@@ -154,7 +183,7 @@ impl Github {
         from: &String,
         to: &String,
         reference: &String,
-    ) -> Value {
+    ) -> Option<GithubPullRequest> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let mut params = HashMap::<String, &String>::with_capacity(2);
         let title: String = format!("PR for: {}. {} into {}", reference, from, to);
@@ -164,7 +193,14 @@ impl Github {
 
         let response = self.post(endpoint, Some(params)).await;
 
-        serde_json::from_str::<Value>(&response).unwrap()
+        match serde_json::from_str::<GithubPullRequest>(&response) {
+            Ok(pr) => Some(pr),
+            Err(e) => {
+                // TODO: use logger
+                println!("Unable to create pull request: {:?}", e);
+                None
+            }
+        }
     }
 
     pub async fn merge_pull(&self, repo: &String, pull_number: &u64) -> MergeStatus {
