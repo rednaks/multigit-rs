@@ -51,7 +51,8 @@ async fn main() {
     let args = Aargs::parse();
     let config: Config = match load_config() {
         Ok(config) => config,
-        Err(_) => {
+        Err(e) => {
+            error!("{}", e);
             std::process::exit(-1);
         }
     };
