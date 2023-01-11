@@ -10,9 +10,10 @@ pub struct Config {
 
 pub fn load_config() -> Result<Config, String> {
     let text = std::fs::read_to_string("config.json").expect("Err");
-    match serde_json::from_str(&text) {
+    let ds = &mut serde_json::Deserializer::from_str(&text);
+    let result: Result<Config, _> = serde_path_to_error::deserialize(ds);
+    match result {
         Ok(config) => Ok(config),
-        Err(e) => Err(format!("Unable to load config: {:?}", e)),
+        Err(e) => Err(format!("Unable to load config: {}", e)),
     }
 }
-
