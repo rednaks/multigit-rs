@@ -12,4 +12,5 @@ pub enum CompareStatus {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct CommitsComparison {
     pub status: CompareStatus,
+    // TODO
 }
