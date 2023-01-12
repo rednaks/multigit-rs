@@ -1,5 +1,5 @@
 mod response;
-pub use response::{GithubBranch, GithubPullRequest, GithubRepo};
+pub use response::{GithubBranch, GithubPullRequest, GithubPullRequestMergeStatus, GithubRepo};
 use std::collections::HashMap;
 
 use log::debug;
@@ -18,11 +18,6 @@ pub enum CompareStatus {
     Behind,
     Diverged,
     Identical,
-}
-
-pub enum MergeStatus {
-    Success,
-    Failed,
 }
 
 pub struct GithubAPIResponseDeserializeError {
@@ -218,16 +213,24 @@ impl Github {
         }
     }
 
-    pub async fn merge_pull(&self, repo: &String, pull_number: &u64) -> MergeStatus {
+    pub async fn merge_pull(
+        &self,
+        repo: &String,
+        pull_number: &u64,
+    ) -> Result<GithubPullRequestMergeStatus, GithubAPIResponseDeserializeError> {
         let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
 
         let response = self.put(endpoint, None).await;
 
-        let parsed = serde_json::from_str::<Value>(&response).unwrap();
+        let ds = &mut serde_json::Deserializer::from_str(&response);
+        let result: Result<GithubPullRequestMergeStatus, _> = serde_path_to_error::deserialize(ds);
 
-        match parsed["merged"].as_bool().unwrap_or(false) {
-            true => MergeStatus::Success,
-            false => MergeStatus::Failed,
+        match result {
+            Ok(merge_status) => Ok(merge_status),
+            Err(e) => Err(GithubAPIResponseDeserializeError {
+                parse_error: format!("Error while merging pull request {}: {}", pull_number, e),
+                original_response: Some(response),
+            }),
         }
     }
 

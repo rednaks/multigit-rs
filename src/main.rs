@@ -1,7 +1,7 @@
 use clap::Parser;
 use config::{load_config, Config};
 use exitcode;
-use github::{CompareStatus, Github, GithubBranch, GithubPullRequest, MergeStatus};
+use github::{CompareStatus, Github, GithubBranch, GithubPullRequest};
 use log::debug;
 use log::error;
 use log::info;
@@ -162,13 +162,14 @@ async fn main() {
                 }
                 let merge_status = gh.merge_pull(&repo_name, &pr.number).await;
                 match merge_status {
-                    MergeStatus::Success => {
-                        if args.delete_branches {
+                    Ok(merge_status) => {
+                        if merge_status.merged == true && args.delete_branches {
                             gh.delete_branches(&repo_name, &args.from).await;
                         }
                     }
-                    MergeStatus::Failed => {
-                        error!("Failed to merge #{} ", pr.number)
+                    Err(e) => {
+                        error!("Failed to merge #{}, {}", pr.number, e.parse_error);
+                        debug!("original response: {:?}", e.original_response);
                     }
                 }
             }

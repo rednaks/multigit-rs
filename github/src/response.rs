@@ -324,3 +324,10 @@ pub struct GithubPullRequest {
     pub deletion: Option<u32>,
     pub changed_files: Option<u16>,
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct GithubPullRequestMergeStatus {
+    pub sha: String,
+    pub merged: bool,
+    pub message: String,
+}
