@@ -125,7 +125,7 @@ async fn main() {
 
                 if pulls.len() > 0 {
                     // TODO: is there a better way ?
-                    info!("PRs already exists ?: {:?}", pulls);
+                    debug!("PRs already exists ?: {}", pulls.len());
                     Some(pulls[0].clone())
                 } else if args.create {
                     info!("Creating pull request for repo {}", repo_name);
@@ -152,7 +152,7 @@ async fn main() {
             }
         };
 
-        debug!("PR: {:?}", pull_request);
+        debug!("PR: {:?}", pull_request.clone().unwrap().title);
 
         match pull_request {
             Some(pr) => {
@@ -176,6 +176,5 @@ async fn main() {
                 //
             }
         }
-        if args.merge {}
     }
 }
