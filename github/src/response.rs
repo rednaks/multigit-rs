@@ -331,3 +331,6 @@ pub struct GithubPullRequestMergeStatus {
     pub merged: bool,
     pub message: String,
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct GithubDeleteReference {}

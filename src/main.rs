@@ -1,7 +1,8 @@
 use clap::Parser;
 use config::{load_config, Config};
 use exitcode;
-use github::{CompareStatus, Github, GithubBranch, GithubPullRequest};
+use github::commits::response::CompareStatus;
+use github::{Github, GithubBranch, GithubPullRequest};
 use log::debug;
 use log::error;
 use log::info;
@@ -66,8 +67,16 @@ async fn main() {
             Err(e) => {
                 error!(
                     "Couldn't get branches for repo {:?}, error: {}. Skipping ...",
-                    &repo_name, e.parse_error
+                    &repo_name,
+                    e.error_message()
                 );
+
+                match e.extra_info() {
+                    Some(extra_info) => debug!("{}", extra_info),
+                    _ => {
+                        //
+                    }
+                }
                 // TODO: should we skip or abort ?
                 continue;
             }
@@ -102,13 +111,24 @@ async fn main() {
             }
         }
 
-        let comp = gh.compare_branches(&repo_name, &args.to, &args.from).await;
-        debug!(
-            "{} comp {} and {}: {:?}",
-            repo_name, args.to, args.from, comp
-        );
+        let comp = match gh.compare_branches(&repo_name, &args.to, &args.from).await {
+            Ok(comp) => comp,
+            Err(e) => {
+                error!(
+                    "Unable to get comparison between {} and {} : {}",
+                    args.to,
+                    args.from,
+                    e.error_message()
+                );
+                match e.extra_info() {
+                    Some(extra_info) => debug!("{}", extra_info),
+                    None => {}
+                };
+                std::process::exit(-1);
+            }
+        };
 
-        let pull_request: Option<GithubPullRequest> = match comp {
+        let pull_request: Option<GithubPullRequest> = match comp.status {
             CompareStatus::Behind | CompareStatus::Diverged => {
                 let pulls: Vec<GithubPullRequest> =
                     match gh.list_pulls(&repo_name, &args.from, &args.to).await {
@@ -116,7 +136,8 @@ async fn main() {
                         Err(e) => {
                             error!(
                                 "Unable to get pull requests for repo {:?}, err: {}",
-                                &repo_name, e.parse_error
+                                &repo_name,
+                                e.error_message()
                             );
                             // TODO: how should this be handled ?
                             std::process::exit(-1);
@@ -138,7 +159,7 @@ async fn main() {
                     {
                         Ok(pr) => Some(pr),
                         Err(e) => {
-                            println!("{}", e.parse_error);
+                            println!("{}", e.error_message());
                             None
                         }
                     }
@@ -164,12 +185,30 @@ async fn main() {
                 match merge_status {
                     Ok(merge_status) => {
                         if merge_status.merged == true && args.delete_branches {
-                            gh.delete_branches(&repo_name, &args.from).await;
+                            match gh.delete_reference(&repo_name, &args.from).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(
+                                        "Failed to delete branch {}. reason: {}",
+                                        args.from,
+                                        e.error_message()
+                                    );
+                                    match e.extra_info() {
+                                        Some(extra_info) => {
+                                            debug!("original response: {:?}", extra_info)
+                                        }
+                                        None => {}
+                                    }
+                                }
+                            }
                         }
                     }
                     Err(e) => {
-                        error!("Failed to merge #{}, {}", pr.number, e.parse_error);
-                        debug!("original response: {:?}", e.original_response);
+                        error!("Failed to merge #{}, {}", pr.number, e.error_message());
+                        match e.extra_info() {
+                            Some(extra_info) => debug!("original response: {:?}", extra_info),
+                            None => {}
+                        }
                     }
                 }
             }

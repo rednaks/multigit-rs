@@ -1,28 +1,50 @@
+pub mod commits;
+mod github;
 mod response;
-pub use response::{GithubBranch, GithubPullRequest, GithubPullRequestMergeStatus, GithubRepo};
+
+pub use response::{
+    GithubBranch, GithubDeleteReference, GithubPullRequest, GithubPullRequestMergeStatus,
+    GithubRepo,
+};
+
+pub use github::Github;
+
 use std::collections::HashMap;
 
-use log::debug;
-use reqwest::{header, RequestBuilder};
-use serde_json::Value;
+use reqwest::{header, RequestBuilder, Response};
 
-pub struct Github {
-    pub client: reqwest::Client,
-    pub owner: String,
-    pub token: String,
-}
-
-#[derive(Debug)]
-pub enum CompareStatus {
-    Ahead,
-    Behind,
-    Diverged,
-    Identical,
+pub trait GithubAPIError {
+    fn error_message(&self) -> String;
+    fn extra_info(&self) -> Option<String>;
 }
 
 pub struct GithubAPIResponseDeserializeError {
     pub parse_error: String,
     pub original_response: Option<String>,
+}
+
+pub struct GithubAPIResponseError {
+    pub message: String,
+}
+
+impl GithubAPIError for GithubAPIResponseError {
+    fn error_message(&self) -> String {
+        self.message.clone()
+    }
+
+    fn extra_info(&self) -> Option<String> {
+        None
+    }
+}
+
+impl GithubAPIError for GithubAPIResponseDeserializeError {
+    fn error_message(&self) -> String {
+        self.parse_error.clone()
+    }
+
+    fn extra_info(&self) -> Option<String> {
+        self.original_response.clone()
+    }
 }
 
 impl Github {
@@ -39,11 +61,20 @@ impl Github {
             .header(header::ACCEPT, "application/vnd.github+json")
     }
 
-    async fn send_and_parse(&self, req: RequestBuilder) -> String {
-        req.send().await.unwrap().text().await.unwrap()
+    async fn send_and_parse(&self, req: RequestBuilder) -> Result<String, reqwest::StatusCode> {
+        let r: Response = req.send().await.unwrap();
+
+        match r.error_for_status() {
+            Ok(response) => Ok(response.text().await.unwrap()),
+            Err(e) => Err(e.status().unwrap()),
+        }
     }
 
-    async fn get(&self, endpoint: String, params: Option<&[(&String, &String)]>) -> String {
+    async fn get(
+        &self,
+        endpoint: String,
+        params: Option<&[(&String, &String)]>,
+    ) -> Result<String, reqwest::StatusCode> {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.get(url);
@@ -52,7 +83,11 @@ impl Github {
             .await
     }
 
-    async fn post(&self, endpoint: String, params: Option<HashMap<String, &String>>) -> String {
+    async fn post(
+        &self,
+        endpoint: String,
+        params: Option<HashMap<String, &String>>,
+    ) -> Result<String, reqwest::StatusCode> {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.post(url);
@@ -60,15 +95,22 @@ impl Github {
             .await
     }
 
-    async fn put(&self, endpoint: String, params: Option<HashMap<String, &String>>) -> String {
+    async fn put(
+        &self,
+        endpoint: String,
+        params: Option<HashMap<String, &String>>,
+    ) -> Result<String, reqwest::StatusCode> {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.put(url);
         self.send_and_parse(self.add_headers(req).json(&params))
             .await
     }
-
-    async fn delete(&self, endpoint: String, params: Option<HashMap<String, &String>>) -> String {
+    async fn delete(
+        &self,
+        endpoint: String,
+        params: Option<HashMap<String, &String>>,
+    ) -> Result<String, reqwest::StatusCode> {
         let url = format!("https://api.github.com/{}", endpoint);
 
         let req = self.client.delete(url);
@@ -76,81 +118,76 @@ impl Github {
             .await
     }
 
-    pub async fn list_repos(&self, is_user: &Option<bool>) -> Vec<GithubRepo> {
-        let mut endpoint = format!("orgs/{}/repos", self.owner);
-        if is_user.unwrap_or(false) {
-            endpoint = format!("users/{}/repos", self.owner);
-        }
+    // pub async fn list_repos(&self, is_user: &Option<bool>) -> Vec<GithubRepo> {
+    //     let mut endpoint = format!("orgs/{}/repos", self.owner);
+    //     if is_user.unwrap_or(false) {
+    //         endpoint = format!("users/{}/repos", self.owner);
+    //     }
 
-        let response = self.get(endpoint, None).await;
+    //     match self.get(endpoint, None).await {
+    //         Ok(response) => serde_json::from_str::<Vec<GithubRepo>>(&response).unwrap(),
+    //         Err(_) => {
+    //             match status_code {
+    //                 reqwest::StatusCode
+    //             }
+    //         }
+    //     }
+    // }
 
-        serde_json::from_str::<Vec<GithubRepo>>(&response).unwrap()
-    }
-
-    pub async fn get_repo(
-        &self,
-        repo: &String,
-    ) -> Result<GithubRepo, GithubAPIResponseDeserializeError> {
+    pub async fn get_repo(&self, repo: &String) -> Result<GithubRepo, Box<dyn GithubAPIError>> {
         let endpoint: String = format!("repos/{}/{}", self.owner, repo);
-        let response = self.get(endpoint, None).await;
-
-        let ds = &mut serde_json::Deserializer::from_str(&response);
-        let result: Result<GithubRepo, _> = serde_path_to_error::deserialize(ds);
-        match result {
-            Ok(repo) => Ok(repo),
-            Err(e) => Err(GithubAPIResponseDeserializeError {
-                parse_error: format!("Unable to get repo : {}: {}", repo, e),
-                original_response: Some(response),
-            }),
+        match self.get(endpoint, None).await {
+            Ok(response) => {
+                let ds = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<GithubRepo, _> = serde_path_to_error::deserialize(ds);
+                match result {
+                    Ok(repo) => Ok(repo),
+                    Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: format!("Unable to get repo : {}: {}", repo, e),
+                        original_response: Some(response),
+                    })),
+                }
+            }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::FORBIDDEN => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("You are not authorized to get this repo"),
+                })),
+                reqwest::StatusCode::NOT_FOUND => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("You are not authorized to get this repo"),
+                })),
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Unhandled"),
+                })),
+            },
         }
     }
 
     pub async fn list_branches(
         &self,
         repo: &String,
-    ) -> Result<Vec<GithubBranch>, GithubAPIResponseDeserializeError> {
+    ) -> Result<Vec<GithubBranch>, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
 
-        let response = self.get(endpoint, None).await;
-
-        let ds = &mut serde_json::Deserializer::from_str(&response);
-        let result: Result<Vec<GithubBranch>, _> = serde_path_to_error::deserialize(ds);
-        match result {
-            Ok(branches) => Ok(branches),
-            Err(e) => Err(GithubAPIResponseDeserializeError {
-                parse_error: format!("Error: Unable to get branches: {:?}", e),
-                original_response: Some(response),
-            }),
-        }
-    }
-
-    pub async fn compare_branches(
-        &self,
-        repo: &String,
-        base: &String,
-        head: &String,
-    ) -> CompareStatus {
-        let endpoint = format!("repos/{}/{}/compare/{}...{}", self.owner, repo, base, head);
-
-        let response = self.get(endpoint, None).await;
-
-        let parsed = serde_json::from_str::<Value>(&response).unwrap();
-
-        // compare don't show when refs are conflicting.
-
-        match parsed["status"].as_str() {
-            Some(a_status) => match a_status {
-                "ahead" => CompareStatus::Ahead,
-                "behind" => CompareStatus::Behind,
-                "diverged" => CompareStatus::Diverged,
-                "identical" => CompareStatus::Identical,
-                _ => {
-                    panic!("Comparision not handleld !")
+        match self.get(endpoint, None).await {
+            Ok(response) => {
+                let ds = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<Vec<GithubBranch>, _> = serde_path_to_error::deserialize(ds);
+                match result {
+                    Ok(branches) => Ok(branches),
+                    Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: format!("Error: Unable to get branches: {:?}", e),
+                        original_response: Some(response),
+                    })),
                 }
-            },
-            None => {
-                panic!("No status returned !");
             }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::NOT_FOUND => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Resource Not found"),
+                })),
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Unhandled"),
+                })),
+            },
         }
     }
 
@@ -159,9 +196,9 @@ impl Github {
         repo: &String,
         from: &String,
         to: &String,
-    ) -> Result<Vec<GithubPullRequest>, GithubAPIResponseDeserializeError> {
+    ) -> Result<Vec<GithubPullRequest>, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
-        let response = self
+        match self
             .get(
                 endpoint,
                 Some(&[
@@ -170,18 +207,31 @@ impl Github {
                     (&String::from("base"), to),
                 ]),
             )
-            .await;
+            .await
+        {
+            Ok(response) => {
+                let deserializer = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<Vec<GithubPullRequest>, _> =
+                    serde_path_to_error::deserialize(deserializer);
 
-        let deserializer = &mut serde_json::Deserializer::from_str(&response);
-        let result: Result<Vec<GithubPullRequest>, _> =
-            serde_path_to_error::deserialize(deserializer);
-
-        match result {
-            Ok(pull_requests) => Ok(pull_requests),
-            Err(e) => Err(GithubAPIResponseDeserializeError {
-                parse_error: format!("Unable to get list of pull requests: {}", e),
-                original_response: Some(response),
-            }),
+                match result {
+                    Ok(pull_requests) => Ok(pull_requests),
+                    Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: format!("Unable to get list of pull requests: {}", e),
+                        original_response: Some(response),
+                    })),
+                }
+            }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Invalid"),
+                    }))
+                }
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Unhandled"),
+                })),
+            },
         }
     }
 
@@ -191,7 +241,7 @@ impl Github {
         from: &String,
         to: &String,
         reference: &String,
-    ) -> Result<GithubPullRequest, GithubAPIResponseDeserializeError> {
+    ) -> Result<GithubPullRequest, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let mut params = HashMap::<String, &String>::with_capacity(2);
         let title: String = format!("PR for: {}. {} into {}", reference, from, to);
@@ -199,17 +249,32 @@ impl Github {
         params.insert(String::from("base"), to);
         params.insert(String::from("head"), from);
 
-        let response = self.post(endpoint, Some(params)).await;
+        match self.post(endpoint, Some(params)).await {
+            Ok(response) => {
+                let ds = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<GithubPullRequest, _> = serde_path_to_error::deserialize(ds);
 
-        let ds = &mut serde_json::Deserializer::from_str(&response);
-        let result: Result<GithubPullRequest, _> = serde_path_to_error::deserialize(ds);
-
-        match result {
-            Ok(pr) => Ok(pr),
-            Err(e) => Err(GithubAPIResponseDeserializeError {
-                parse_error: format!("Unable to create pull request: {}", e),
-                original_response: Some(response),
-            }),
+                match result {
+                    Ok(pr) => Ok(pr),
+                    Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: format!("Unable to create pull request: {}", e),
+                        original_response: Some(response),
+                    })),
+                }
+            }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::FORBIDDEN => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("You are not allowed to create a pull request"),
+                })),
+                reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Invalid request"),
+                    }))
+                }
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Unhandled"),
+                })),
+            },
         }
     }
 
@@ -217,27 +282,76 @@ impl Github {
         &self,
         repo: &String,
         pull_number: &u64,
-    ) -> Result<GithubPullRequestMergeStatus, GithubAPIResponseDeserializeError> {
+    ) -> Result<GithubPullRequestMergeStatus, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
 
-        let response = self.put(endpoint, None).await;
+        match self.put(endpoint, None).await {
+            Ok(response) => {
+                let ds = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<GithubPullRequestMergeStatus, _> =
+                    serde_path_to_error::deserialize(ds);
 
-        let ds = &mut serde_json::Deserializer::from_str(&response);
-        let result: Result<GithubPullRequestMergeStatus, _> = serde_path_to_error::deserialize(ds);
-
-        match result {
-            Ok(merge_status) => Ok(merge_status),
-            Err(e) => Err(GithubAPIResponseDeserializeError {
-                parse_error: format!("Error while merging pull request {}: {}", pull_number, e),
-                original_response: Some(response),
-            }),
+                match result {
+                    Ok(merge_status) => Ok(merge_status),
+                    Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: format!(
+                            "Error while merging pull request {}: {}",
+                            pull_number, e
+                        ),
+                        original_response: Some(response),
+                    })),
+                }
+            }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::INTERNAL_SERVER_ERROR => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Internal Error"),
+                    }))
+                }
+                reqwest::StatusCode::SERVICE_UNAVAILABLE => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Service unavailable"),
+                })),
+                reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Unprocessable entity"),
+                    }))
+                }
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Unhandled"),
+                })),
+            },
         }
     }
 
-    pub async fn delete_branches(&self, repo: &String, branch: &String) {
-        let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo, branch);
+    pub async fn delete_reference(
+        &self,
+        repo: &String,
+        reference: &String,
+    ) -> Result<(), Box<dyn GithubAPIError>> {
+        let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo, reference);
 
-        let res = self.delete(endpoint, None).await;
-        debug!("{}", res);
+        match self.delete(endpoint, None).await {
+            Ok(response) => {
+                let ds = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<GithubDeleteReference, _> = serde_path_to_error::deserialize(ds);
+                match result {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: String::from(""),
+                        original_response: None,
+                    })),
+                }
+            }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Validation error"),
+                    }))
+                }
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Unhandled"),
+                })),
+            },
+        }
     }
 }
