@@ -25,6 +25,11 @@ pub enum MergeStatus {
     Failed,
 }
 
+pub struct GithubAPIResponseDeserializeError {
+    pub parse_error: String,
+    pub original_response: Option<String>,
+}
+
 impl Github {
     pub fn new(token: String, owner: String) -> Github {
         Github {
@@ -87,31 +92,40 @@ impl Github {
         serde_json::from_str::<Vec<GithubRepo>>(&response).unwrap()
     }
 
-    pub async fn get_repo(&self, repo: &String) -> Option<GithubRepo> {
+    pub async fn get_repo(
+        &self,
+        repo: &String,
+    ) -> Result<GithubRepo, GithubAPIResponseDeserializeError> {
         let endpoint: String = format!("repos/{}/{}", self.owner, repo);
         let response = self.get(endpoint, None).await;
 
-        match serde_json::from_str::<GithubRepo>(&response) {
-            Ok(repo) => Some(repo),
-            Err(e) => {
-                println!("Unable to get repo : {:?}: {:?}", repo, e);
-                None
-            }
+        let ds = &mut serde_json::Deserializer::from_str(&response);
+        let result: Result<GithubRepo, _> = serde_path_to_error::deserialize(ds);
+        match result {
+            Ok(repo) => Ok(repo),
+            Err(e) => Err(GithubAPIResponseDeserializeError {
+                parse_error: format!("Unable to get repo : {}: {}", repo, e),
+                original_response: Some(response),
+            }),
         }
     }
 
-    pub async fn list_branches(&self, repo: &String) -> Option<Vec<GithubBranch>> {
+    pub async fn list_branches(
+        &self,
+        repo: &String,
+    ) -> Result<Vec<GithubBranch>, GithubAPIResponseDeserializeError> {
         let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
 
         let response = self.get(endpoint, None).await;
 
-        match serde_json::from_str::<Vec<GithubBranch>>(&response) {
-            Ok(branches) => Some(branches),
-            Err(e) => {
-                println!("Error: Unable to get branches: {:?}", e);
-                println!("Response: {:?}", response);
-                None
-            }
+        let ds = &mut serde_json::Deserializer::from_str(&response);
+        let result: Result<Vec<GithubBranch>, _> = serde_path_to_error::deserialize(ds);
+        match result {
+            Ok(branches) => Ok(branches),
+            Err(e) => Err(GithubAPIResponseDeserializeError {
+                parse_error: format!("Error: Unable to get branches: {:?}", e),
+                original_response: Some(response),
+            }),
         }
     }
 
@@ -150,7 +164,7 @@ impl Github {
         repo: &String,
         from: &String,
         to: &String,
-    ) -> Option<Vec<GithubPullRequest>> {
+    ) -> Result<Vec<GithubPullRequest>, GithubAPIResponseDeserializeError> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let response = self
             .get(
@@ -168,12 +182,11 @@ impl Github {
             serde_path_to_error::deserialize(deserializer);
 
         match result {
-            Ok(pull_requests) => Some(pull_requests),
-            Err(e) => {
-                println!("Unable to get list of pull requests: {}", e);
-                // println!("Response: {:?}", &response);
-                None
-            }
+            Ok(pull_requests) => Ok(pull_requests),
+            Err(e) => Err(GithubAPIResponseDeserializeError {
+                parse_error: format!("Unable to get list of pull requests: {}", e),
+                original_response: Some(response),
+            }),
         }
     }
 
@@ -183,7 +196,7 @@ impl Github {
         from: &String,
         to: &String,
         reference: &String,
-    ) -> Option<GithubPullRequest> {
+    ) -> Result<GithubPullRequest, GithubAPIResponseDeserializeError> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let mut params = HashMap::<String, &String>::with_capacity(2);
         let title: String = format!("PR for: {}. {} into {}", reference, from, to);
@@ -193,13 +206,15 @@ impl Github {
 
         let response = self.post(endpoint, Some(params)).await;
 
-        match serde_json::from_str::<GithubPullRequest>(&response) {
-            Ok(pr) => Some(pr),
-            Err(e) => {
-                // TODO: use logger
-                println!("Unable to create pull request: {:?}", e);
-                None
-            }
+        let ds = &mut serde_json::Deserializer::from_str(&response);
+        let result: Result<GithubPullRequest, _> = serde_path_to_error::deserialize(ds);
+
+        match result {
+            Ok(pr) => Ok(pr),
+            Err(e) => Err(GithubAPIResponseDeserializeError {
+                parse_error: format!("Unable to create pull request: {}", e),
+                original_response: Some(response),
+            }),
         }
     }
 

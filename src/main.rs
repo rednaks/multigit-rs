@@ -62,11 +62,11 @@ async fn main() {
 
     for repo_name in config.repos {
         let branches: Vec<GithubBranch> = match gh.list_branches(&repo_name).await {
-            Some(branches) => branches,
-            None => {
+            Ok(branches) => branches,
+            Err(e) => {
                 error!(
-                    "Couldn't get branches for repo {:?}. Skipping ...",
-                    &repo_name
+                    "Couldn't get branches for repo {:?}, error: {}. Skipping ...",
+                    &repo_name, e.parse_error
                 );
                 // TODO: should we skip or abort ?
                 continue;
@@ -112,9 +112,12 @@ async fn main() {
             CompareStatus::Behind | CompareStatus::Diverged => {
                 let pulls: Vec<GithubPullRequest> =
                     match gh.list_pulls(&repo_name, &args.from, &args.to).await {
-                        Some(pulls) => pulls,
-                        None => {
-                            error!("Unable to get pull requests for repo {:?}", &repo_name);
+                        Ok(pulls) => pulls,
+                        Err(e) => {
+                            error!(
+                                "Unable to get pull requests for repo {:?}, err: {}",
+                                &repo_name, e.parse_error
+                            );
                             // TODO: how should this be handled ?
                             std::process::exit(-1);
                         }
@@ -126,8 +129,19 @@ async fn main() {
                     Some(pulls[0].clone())
                 } else if args.create {
                     info!("Creating pull request for repo {}", repo_name);
-                    gh.create_pull(&repo_name, &args.from, &args.to, &args.reference)
+
+                    // TODO: return None or abort ?
+                    // TODO: I think we still should return None because of what happen next
+                    match gh
+                        .create_pull(&repo_name, &args.from, &args.to, &args.reference)
                         .await
+                    {
+                        Ok(pr) => Some(pr),
+                        Err(e) => {
+                            println!("{}", e.parse_error);
+                            None
+                        }
+                    }
                 } else {
                     None
                 }
