@@ -9,6 +9,7 @@ use github::Github;
 use log::debug;
 use log::error;
 use log::info;
+use log::warn;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, long_about=None)]
@@ -75,7 +76,18 @@ async fn get_or_create_pull_request(
     debug!("Matched prs: {:?}", existing_pr);
 
     match existing_pr {
-        Some(pull_request) => Some(pull_request.clone()),
+        Some(pull_request) => {
+            let full_pr: Option<PullRequest> =
+                match gh.get_pull(&repo_name, pull_request.number).await {
+                    Ok(pr) => Some(pr),
+                    Err(e) => {
+                        error!("Unable to get pull {:?}", e.error_message());
+
+                        None
+                    }
+                };
+            full_pr
+        }
         None => {
             if args.create {
                 return match gh
@@ -94,35 +106,55 @@ async fn get_or_create_pull_request(
     }
 }
 
-async fn merge_and_delete(gh: &Github, repo_name: &String, pr: &PullRequest, args: &Aargs) {
-    let merge_status = gh.merge_pull(repo_name, pr).await;
-    match merge_status {
-        Ok(merge_status) => {
-            if merge_status.merged == true && args.delete_branches {
-                match gh.delete_reference(&repo_name, &args.from).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!(
-                            "Failed to delete branch {}. reason: {}",
-                            args.from,
-                            e.error_message()
-                        );
-                        match e.extra_info() {
-                            Some(extra_info) => {
-                                debug!("original response: {:?}", extra_info)
+async fn merge_and_delete(gh: &Github, pr: &PullRequest, args: &Aargs) {
+    let repo_name: String = pr.base.repo.as_ref().unwrap().name.clone();
+
+    info!(
+        "Merging {} into {} for {}",
+        pr.head.label, pr.base.label, repo_name
+    );
+
+    debug!("is mergeable ? {:?}", pr.mergeable.unwrap_or(false));
+
+    match pr.mergeable {
+        Some(mergeable) => {
+            if mergeable {
+                let merge_status = gh.merge_pull(&repo_name, pr).await;
+                match merge_status {
+                    Ok(merge_status) => {
+                        if merge_status.merged == true && args.delete_branches {
+                            match gh.delete_reference(&repo_name, &args.from).await {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(
+                                        "Failed to delete branch {}. reason: {}",
+                                        args.from,
+                                        e.error_message()
+                                    );
+                                    match e.extra_info() {
+                                        Some(extra_info) => {
+                                            debug!("original response: {:?}", extra_info)
+                                        }
+                                        None => {}
+                                    }
+                                }
                             }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to merge #{}, {}", pr.number, e.error_message());
+                        match e.extra_info() {
+                            Some(extra_info) => debug!("original response: {:?}", extra_info),
                             None => {}
                         }
                     }
                 }
+            } else {
+                warn!("Pull request is not mergeable, there is a conflict");
             }
         }
-        Err(e) => {
-            error!("Failed to merge #{}, {}", pr.number, e.error_message());
-            match e.extra_info() {
-                Some(extra_info) => debug!("original response: {:?}", extra_info),
-                None => {}
-            }
+        None => {
+            info!("Unable to know if it's mergeable, please try later");
         }
     }
 }
@@ -228,7 +260,7 @@ async fn main() {
                     info!("Merge not requested, nothing to do !");
                     std::process::exit(0);
                 }
-                merge_and_delete(&gh, &repo_name, &pr, &args).await;
+                merge_and_delete(&gh, &pr, &args).await;
             }
             None => {
                 //
