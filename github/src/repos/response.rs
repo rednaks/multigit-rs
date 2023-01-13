@@ -1,4 +1,4 @@
-use crate::response::GithubUser;
+use crate::users::response::User;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -7,7 +7,7 @@ pub struct Repo {
     pub node_id: String,
     pub name: String,
     pub full_name: String,
-    pub owner: GithubUser,
+    pub owner: User,
     pub private: bool,
     pub html_url: String,
     pub description: Option<String>,

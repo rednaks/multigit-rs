@@ -5,6 +5,8 @@ pub mod pulls;
 pub mod references;
 pub mod repos;
 mod response;
+pub mod teams;
+pub mod users;
 
 pub use github::Github;
 
