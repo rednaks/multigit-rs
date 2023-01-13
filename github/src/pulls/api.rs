@@ -6,6 +6,46 @@ use crate::GithubAPIResponseError;
 use std::collections::HashMap;
 
 impl Github {
+    pub async fn get_pull(
+        &self,
+        repo: &String,
+        number: u64,
+    ) -> Result<PullRequest, Box<dyn GithubAPIError>> {
+        let endpoint = format!("repos/{}/{repo}/pulls/{number}", self.owner);
+        match self.get(endpoint, None).await {
+            Ok(response) => {
+                let deserializer = &mut serde_json::Deserializer::from_str(&response);
+                let result: Result<PullRequest, _> = serde_path_to_error::deserialize(deserializer);
+
+                match result {
+                    Ok(pull_request) => Ok(pull_request),
+                    Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
+                        parse_error: format!("Unable to get list of pull requests: {}", e),
+                        original_response: Some(response),
+                    })),
+                }
+            }
+            Err(status_code) => match status_code {
+                reqwest::StatusCode::UNPROCESSABLE_ENTITY => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Invalid"),
+                    }))
+                }
+                reqwest::StatusCode::NOT_FOUND => Err(Box::new(GithubAPIResponseError {
+                    message: String::from("Pull Request not found"),
+                })),
+                reqwest::StatusCode::INTERNAL_SERVER_ERROR => {
+                    Err(Box::new(GithubAPIResponseError {
+                        message: String::from("Internal server error"),
+                    }))
+                }
+                _ => Err(Box::new(GithubAPIResponseError {
+                    message: format!("Unhandled: {}", status_code),
+                })),
+            },
+        }
+    }
+
     pub async fn list_pulls(
         &self,
         repo: &String,
@@ -87,7 +127,7 @@ impl Github {
                     }))
                 }
                 _ => Err(Box::new(GithubAPIResponseError {
-                    message: String::from("Unhandled"),
+                    message: format!("Unhandled: {}", status_code),
                 })),
             },
         }
@@ -135,7 +175,7 @@ impl Github {
                     }))
                 }
                 _ => Err(Box::new(GithubAPIResponseError {
-                    message: String::from("Unhandled"),
+                    message: format!("Unhandled: {}", status_code),
                 })),
             },
         }
