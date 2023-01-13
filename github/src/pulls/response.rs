@@ -14,7 +14,7 @@ pub enum GithubPullRequestState {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct GithubPullRequest {
+pub struct PullRequest {
     pub id: u32,
     pub node_id: String,
     pub url: String,
@@ -49,7 +49,7 @@ pub struct GithubPullRequest {
     pub base: GithubGitPointer,
     pub _links: Value, // TODO: links type ?
     pub author_association: GithubUserAssociation,
-    pub auto_merge: Option<GithubAutoMergeObject>,
+    pub auto_merge: Option<AutoMergeObject>,
     pub draft: bool,
     pub merged: Option<bool>,
     pub mergeable: Option<bool>,
@@ -66,22 +66,22 @@ pub struct GithubPullRequest {
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(rename_all = "lowercase")]
-pub enum GithubMergeMethod {
+pub enum MergeMethod {
     Merge,
     Squash,
     Rebase,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct GithubAutoMergeObject {
+pub struct AutoMergeObject {
     pub enabled_by: GithubUser,
-    pub merge_method: GithubMergeMethod,
+    pub merge_method: MergeMethod,
     pub commit_title: String,
     pub commit_message: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct GithubPullRequestMergeStatus {
+pub struct PullRequestMergeStatus {
     pub sha: String,
     pub merged: bool,
     pub message: String,

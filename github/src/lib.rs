@@ -5,10 +5,6 @@ mod response;
 
 pub use response::{GithubBranch, GithubDeleteReference, GithubRepo};
 
-pub use pulls::response::{
-    GithubPullRequest, GithubPullRequestMergeStatus, GithubPullRequestState,
-};
-
 pub use github::Github;
 
 use std::collections::HashMap;

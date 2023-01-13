@@ -2,7 +2,8 @@ use clap::Parser;
 use config::{load_config, Config};
 use exitcode;
 use github::commits::response::CompareStatus;
-use github::{Github, GithubBranch, GithubPullRequest};
+use github::pulls::response::PullRequest;
+use github::{Github, GithubBranch};
 use log::debug;
 use log::error;
 use log::info;
@@ -128,9 +129,9 @@ async fn main() {
             }
         };
 
-        let pull_request: Option<GithubPullRequest> = match comp.status {
+        let pull_request: Option<PullRequest> = match comp.status {
             CompareStatus::Behind | CompareStatus::Diverged => {
-                let pulls: Vec<GithubPullRequest> =
+                let pulls: Vec<PullRequest> =
                     match gh.list_pulls(&repo_name, &args.from, &args.to).await {
                         Ok(pulls) => pulls,
                         Err(e) => {

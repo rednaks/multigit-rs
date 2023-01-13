@@ -1,4 +1,4 @@
-use super::response::{GithubPullRequest, GithubPullRequestMergeStatus};
+use super::response::{PullRequest, PullRequestMergeStatus};
 use crate::Github;
 use crate::GithubAPIError;
 use crate::GithubAPIResponseDeserializeError;
@@ -11,7 +11,7 @@ impl Github {
         repo: &String,
         from: &String,
         to: &String,
-    ) -> Result<Vec<GithubPullRequest>, Box<dyn GithubAPIError>> {
+    ) -> Result<Vec<PullRequest>, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         match self
             .get(
@@ -26,7 +26,7 @@ impl Github {
         {
             Ok(response) => {
                 let deserializer = &mut serde_json::Deserializer::from_str(&response);
-                let result: Result<Vec<GithubPullRequest>, _> =
+                let result: Result<Vec<PullRequest>, _> =
                     serde_path_to_error::deserialize(deserializer);
 
                 match result {
@@ -56,7 +56,7 @@ impl Github {
         from: &String,
         to: &String,
         reference: &String,
-    ) -> Result<GithubPullRequest, Box<dyn GithubAPIError>> {
+    ) -> Result<PullRequest, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
         let mut params = HashMap::<String, &String>::with_capacity(2);
         let title: String = format!("PR for: {}. {} into {}", reference, from, to);
@@ -67,7 +67,7 @@ impl Github {
         match self.post(endpoint, Some(params)).await {
             Ok(response) => {
                 let ds = &mut serde_json::Deserializer::from_str(&response);
-                let result: Result<GithubPullRequest, _> = serde_path_to_error::deserialize(ds);
+                let result: Result<PullRequest, _> = serde_path_to_error::deserialize(ds);
 
                 match result {
                     Ok(pr) => Ok(pr),
@@ -97,13 +97,13 @@ impl Github {
         &self,
         repo: &String,
         pull_number: &u64,
-    ) -> Result<GithubPullRequestMergeStatus, Box<dyn GithubAPIError>> {
+    ) -> Result<PullRequestMergeStatus, Box<dyn GithubAPIError>> {
         let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
 
         match self.put(endpoint, None).await {
             Ok(response) => {
                 let ds = &mut serde_json::Deserializer::from_str(&response);
-                let result: Result<GithubPullRequestMergeStatus, _> =
+                let result: Result<PullRequestMergeStatus, _> =
                     serde_path_to_error::deserialize(ds);
 
                 match result {
