@@ -198,6 +198,3 @@ pub struct GithubGitPointer {
     pub sha: String,
     pub user: GithubUser,
 }
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct GithubDeleteReference {}
