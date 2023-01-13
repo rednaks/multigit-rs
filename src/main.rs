@@ -1,9 +1,10 @@
 use clap::Parser;
 use config::{load_config, Config};
 use exitcode;
+use github::branches::response::Branch;
 use github::commits::response::CompareStatus;
 use github::pulls::response::PullRequest;
-use github::{Github, GithubBranch};
+use github::Github;
 use log::debug;
 use log::error;
 use log::info;
@@ -39,7 +40,7 @@ struct Aargs {
     delete_branches: bool,
 }
 
-fn check_branch_in(branch_name: &String, branches: &Vec<GithubBranch>) -> bool {
+fn check_branch_in(branch_name: &String, branches: &Vec<Branch>) -> bool {
     branches
         .iter()
         .map(|b| b.name.clone())
@@ -63,7 +64,7 @@ async fn main() {
     let gh = Github::new(config.token, config.org_name);
 
     for repo_name in config.repos {
-        let branches: Vec<GithubBranch> = match gh.list_branches(&repo_name).await {
+        let branches: Vec<Branch> = match gh.list_branches(&repo_name).await {
             Ok(branches) => branches,
             Err(e) => {
                 error!(

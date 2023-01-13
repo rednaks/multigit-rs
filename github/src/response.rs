@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde_derive::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::repos::response::Repo;
 
@@ -86,17 +85,6 @@ pub struct GithubPlan {
     pub private_repos: u32,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct GithubBranch {
-    pub name: String,
-    pub commit: GithubCommit,
-    pub protected: bool,
-    pub protection: Option<GithubBranchProtection>,
-    pub protection_url: Option<String>,
-    pub pattern: Option<String>,
-    pub _links: Option<Value>,
-}
-
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct GithubParentCommit {
     pub sha: String,
@@ -149,11 +137,6 @@ pub struct GithubCommit {
     pub parents: Option<Vec<GithubParentCommit>>,
     pub stats: Option<GithubCommitStats>,
     pub files: Option<Vec<GithubDiffEntry>>,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct GithubBranchProtection {
-    pub required_status_checks: Value,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
