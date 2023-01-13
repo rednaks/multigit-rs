@@ -96,9 +96,12 @@ impl Github {
     pub async fn merge_pull(
         &self,
         repo: &String,
-        pull_number: &u64,
+        pull_request: &PullRequest,
     ) -> Result<PullRequestMergeStatus, Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{}/pulls/{}/merge", self.owner, repo, pull_number);
+        let endpoint = format!(
+            "repos/{}/{}/pulls/{}/merge",
+            self.owner, repo, pull_request.number
+        );
 
         match self.put(endpoint, None).await {
             Ok(response) => {
@@ -111,7 +114,7 @@ impl Github {
                     Err(e) => Err(Box::new(GithubAPIResponseDeserializeError {
                         parse_error: format!(
                             "Error while merging pull request {}: {}",
-                            pull_number, e
+                            pull_request.number, e
                         ),
                         original_response: Some(response),
                     })),

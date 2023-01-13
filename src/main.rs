@@ -1,5 +1,6 @@
 use clap::Parser;
 use config::{load_config, Config};
+use env_logger::Env;
 use exitcode;
 use github::branches::response::Branch;
 use github::commits::response::CompareStatus;
@@ -47,9 +48,88 @@ fn check_branch_in(branch_name: &String, branches: &Vec<Branch>) -> bool {
         .any(|b_name| b_name == branch_name.as_str())
 }
 
+async fn get_or_create_pull_request(
+    gh: &Github,
+    repo_name: &String,
+    owner: String,
+    args: &Aargs,
+) -> Option<PullRequest> {
+    let pulls: Vec<PullRequest> = match gh.list_pulls(&repo_name, &args.from, &args.to).await {
+        Ok(pulls) => pulls,
+        Err(e) => {
+            error!(
+                "Unable to get pull requests for repo {:?}, err: {}",
+                &repo_name,
+                e.error_message()
+            );
+            // TODO: how should this be handled ?
+            std::process::exit(-1);
+        }
+    };
+
+    let existing_pr = pulls.iter().find(|pr| {
+        pr.head.label == format!("{}:{}", owner, args.from)
+            && pr.base.label == format!("{}:{}", owner, args.to)
+    });
+
+    debug!("Matched prs: {:?}", existing_pr);
+
+    match existing_pr {
+        Some(pull_request) => Some(pull_request.clone()),
+        None => {
+            if args.create {
+                return match gh
+                    .create_pull(&repo_name, &args.from, &args.to, &args.reference)
+                    .await
+                {
+                    Ok(new_pull_request) => Some(new_pull_request),
+                    Err(e) => {
+                        error!("Unable to create a new PR {}", e.error_message());
+                        None
+                    }
+                };
+            }
+            None
+        }
+    }
+}
+
+async fn merge_and_delete(gh: &Github, repo_name: &String, pr: &PullRequest, args: &Aargs) {
+    let merge_status = gh.merge_pull(repo_name, pr).await;
+    match merge_status {
+        Ok(merge_status) => {
+            if merge_status.merged == true && args.delete_branches {
+                match gh.delete_reference(&repo_name, &args.from).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!(
+                            "Failed to delete branch {}. reason: {}",
+                            args.from,
+                            e.error_message()
+                        );
+                        match e.extra_info() {
+                            Some(extra_info) => {
+                                debug!("original response: {:?}", extra_info)
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to merge #{}, {}", pr.number, e.error_message());
+            match e.extra_info() {
+                Some(extra_info) => debug!("original response: {:?}", extra_info),
+                None => {}
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Aargs::parse();
     let config: Config = match load_config() {
         Ok(config) => config,
@@ -61,7 +141,7 @@ async fn main() {
 
     info!("Managing {}", config.org_name);
 
-    let gh = Github::new(config.token, config.org_name);
+    let gh = Github::new(config.token, config.org_name.clone());
 
     for repo_name in config.repos {
         let branches: Vec<Branch> = match gh.list_branches(&repo_name).await {
@@ -132,42 +212,7 @@ async fn main() {
 
         let pull_request: Option<PullRequest> = match comp.status {
             CompareStatus::Behind | CompareStatus::Diverged => {
-                let pulls: Vec<PullRequest> =
-                    match gh.list_pulls(&repo_name, &args.from, &args.to).await {
-                        Ok(pulls) => pulls,
-                        Err(e) => {
-                            error!(
-                                "Unable to get pull requests for repo {:?}, err: {}",
-                                &repo_name,
-                                e.error_message()
-                            );
-                            // TODO: how should this be handled ?
-                            std::process::exit(-1);
-                        }
-                    };
-
-                if pulls.len() > 0 {
-                    // TODO: is there a better way ?
-                    debug!("PRs already exists ?: {}", pulls.len());
-                    Some(pulls[0].clone())
-                } else if args.create {
-                    info!("Creating pull request for repo {}", repo_name);
-
-                    // TODO: return None or abort ?
-                    // TODO: I think we still should return None because of what happen next
-                    match gh
-                        .create_pull(&repo_name, &args.from, &args.to, &args.reference)
-                        .await
-                    {
-                        Ok(pr) => Some(pr),
-                        Err(e) => {
-                            println!("{}", e.error_message());
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
+                get_or_create_pull_request(&gh, &repo_name, config.org_name.clone(), &args).await
             }
             _ => {
                 info!("Nothing to merge !");
@@ -183,36 +228,7 @@ async fn main() {
                     info!("Merge not requested, nothing to do !");
                     std::process::exit(0);
                 }
-                let merge_status = gh.merge_pull(&repo_name, &pr.number).await;
-                match merge_status {
-                    Ok(merge_status) => {
-                        if merge_status.merged == true && args.delete_branches {
-                            match gh.delete_reference(&repo_name, &args.from).await {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(
-                                        "Failed to delete branch {}. reason: {}",
-                                        args.from,
-                                        e.error_message()
-                                    );
-                                    match e.extra_info() {
-                                        Some(extra_info) => {
-                                            debug!("original response: {:?}", extra_info)
-                                        }
-                                        None => {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to merge #{}, {}", pr.number, e.error_message());
-                        match e.extra_info() {
-                            Some(extra_info) => debug!("original response: {:?}", extra_info),
-                            None => {}
-                        }
-                    }
-                }
+                merge_and_delete(&gh, &repo_name, &pr, &args).await;
             }
             None => {
                 //
