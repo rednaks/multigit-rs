@@ -14,7 +14,7 @@ impl Github {
     ) -> Result<CommitsComparison, Box<dyn GithubAPIError>> {
         let endpoint = format!(
             "repos/{}/{}/compare/{}...{}",
-            self.owner, repo.name, base, head
+            self.owner, repo.name, head, base
         );
 
         match self.get(endpoint, None).await {
