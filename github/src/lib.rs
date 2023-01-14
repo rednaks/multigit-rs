@@ -9,6 +9,7 @@ pub mod teams;
 pub mod users;
 
 pub use github::Github;
+use log::debug;
 
 use std::collections::HashMap;
 
@@ -65,9 +66,13 @@ impl Github {
     async fn send_and_parse(&self, req: RequestBuilder) -> Result<String, reqwest::StatusCode> {
         let r: Response = req.send().await.unwrap();
 
-        match r.error_for_status() {
-            Ok(response) => Ok(response.text().await.unwrap()),
-            Err(e) => Err(e.status().unwrap()),
+        if let Err(e) = r.error_for_status_ref() {
+            let response = r.text().await.unwrap();
+            debug!("error response: {:?}", response);
+            Err(e.status().unwrap())
+        } else {
+            let response = r.text().await.unwrap();
+            Ok(response)
         }
     }
 
