@@ -50,7 +50,7 @@ impl Github {
         let endpoint = format!("repos/{}/{}/git/refs", self.owner, repo.name);
 
         let mut params = HashMap::<String, &String>::with_capacity(2);
-        let ref_ = format!("refs/head/{branch_name}");
+        let ref_ = format!("refs/heads/{branch_name}");
         params.insert(String::from("ref"), &ref_);
         params.insert(String::from("sha"), &from_ref.object.sha);
 
