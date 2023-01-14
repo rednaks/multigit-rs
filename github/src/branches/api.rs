@@ -1,14 +1,12 @@
+use crate::repos::response::Repo;
 use crate::Github;
 use crate::{GithubAPIError, GithubAPIResponseDeserializeError, GithubAPIResponseError};
 
 use super::response::Branch;
 
 impl Github {
-    pub async fn list_branches(
-        &self,
-        repo: &String,
-    ) -> Result<Vec<Branch>, Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{}/branches", self.owner, repo);
+    pub async fn list_branches(&self, repo: &Repo) -> Result<Vec<Branch>, Box<dyn GithubAPIError>> {
+        let endpoint = format!("repos/{}/{}/branches", self.owner, repo.name);
 
         match self.get(endpoint, None).await {
             Ok(response) => {

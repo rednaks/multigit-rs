@@ -1,4 +1,5 @@
 use super::response::CommitsComparison;
+use crate::repos::response::Repo;
 use crate::Github;
 use crate::GithubAPIError;
 use crate::GithubAPIResponseDeserializeError;
@@ -7,11 +8,14 @@ use crate::GithubAPIResponseError;
 impl Github {
     pub async fn compare_branches(
         &self,
-        repo: &String,
+        repo: &Repo,
         base: &String,
         head: &String,
     ) -> Result<CommitsComparison, Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{}/compare/{}...{}", self.owner, repo, base, head);
+        let endpoint = format!(
+            "repos/{}/{}/compare/{}...{}",
+            self.owner, repo.name, base, head
+        );
 
         match self.get(endpoint, None).await {
             Ok(response) => {

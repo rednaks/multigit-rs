@@ -81,10 +81,10 @@ impl Github {
 
     pub async fn delete_reference(
         &self,
-        repo: &String,
+        repo: &Repo,
         reference: &String,
     ) -> Result<(), Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo, reference);
+        let endpoint = format!("repos/{}/{}/git/refs/{}", self.owner, repo.name, reference);
 
         match self.delete(endpoint, None).await {
             Ok(response) => {

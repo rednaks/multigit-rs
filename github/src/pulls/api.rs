@@ -1,4 +1,5 @@
 use super::response::{PullRequest, PullRequestMergeStatus};
+use crate::repos::response::Repo;
 use crate::Github;
 use crate::GithubAPIError;
 use crate::GithubAPIResponseDeserializeError;
@@ -8,10 +9,10 @@ use std::collections::HashMap;
 impl Github {
     pub async fn get_pull(
         &self,
-        repo: &String,
+        repo: &Repo,
         number: u64,
     ) -> Result<PullRequest, Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{repo}/pulls/{number}", self.owner);
+        let endpoint = format!("repos/{}/{}/pulls/{number}", self.owner, repo.name);
         match self.get(endpoint, None).await {
             Ok(response) => {
                 let deserializer = &mut serde_json::Deserializer::from_str(&response);
@@ -48,11 +49,11 @@ impl Github {
 
     pub async fn list_pulls(
         &self,
-        repo: &String,
+        repo: &Repo,
         from: &String,
         to: &String,
     ) -> Result<Vec<PullRequest>, Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
+        let endpoint = format!("repos/{}/{}/pulls", self.owner, repo.name);
         match self
             .get(
                 endpoint,
@@ -92,12 +93,12 @@ impl Github {
 
     pub async fn create_pull(
         &self,
-        repo: &String,
+        repo: &Repo,
         from: &String,
         to: &String,
         reference: &String,
     ) -> Result<PullRequest, Box<dyn GithubAPIError>> {
-        let endpoint = format!("repos/{}/{}/pulls", self.owner, repo);
+        let endpoint = format!("repos/{}/{}/pulls", self.owner, repo.name);
         let mut params = HashMap::<String, &String>::with_capacity(2);
         let title: String = format!("PR for: {}. {} into {}", reference, from, to);
         params.insert(String::from("title"), &title);
@@ -135,12 +136,12 @@ impl Github {
 
     pub async fn merge_pull(
         &self,
-        repo: &String,
+        repo: &Repo,
         pull_request: &PullRequest,
     ) -> Result<PullRequestMergeStatus, Box<dyn GithubAPIError>> {
         let endpoint = format!(
             "repos/{}/{}/pulls/{}/merge",
-            self.owner, repo, pull_request.number
+            self.owner, repo.name, pull_request.number
         );
 
         match self.put(endpoint, None).await {
