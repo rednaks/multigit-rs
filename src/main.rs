@@ -1,10 +1,10 @@
 use clap::Parser;
 use config::{load_config, Config};
 use env_logger::Env;
-use exitcode;
 use github::branches::response::Branch;
 use github::commits::response::CompareStatus;
 use github::pulls::response::PullRequest;
+use github::repos::response::Repo;
 use github::Github;
 use log::debug;
 use log::error;
@@ -27,7 +27,8 @@ struct Aargs {
 
     #[clap(long, value_parser)]
     /// create pull requests if not existing
-    create: bool,
+    create_pulls: bool,
+
     #[clap(long, value_parser)]
     /// merge pull requests
     merge: bool,
@@ -51,16 +52,16 @@ fn check_branch_in(branch_name: &String, branches: &Vec<Branch>) -> bool {
 
 async fn get_or_create_pull_request(
     gh: &Github,
-    repo_name: &String,
+    repo: &Repo,
     owner: String,
     args: &Aargs,
 ) -> Option<PullRequest> {
-    let pulls: Vec<PullRequest> = match gh.list_pulls(&repo_name, &args.from, &args.to).await {
+    let pulls: Vec<PullRequest> = match gh.list_pulls(&repo, &args.from, &args.to).await {
         Ok(pulls) => pulls,
         Err(e) => {
             error!(
                 "Unable to get pull requests for repo {:?}, err: {}",
-                &repo_name,
+                &repo.name,
                 e.error_message()
             );
             // TODO: how should this be handled ?
@@ -77,21 +78,22 @@ async fn get_or_create_pull_request(
 
     match existing_pr {
         Some(pull_request) => {
-            let full_pr: Option<PullRequest> =
-                match gh.get_pull(&repo_name, pull_request.number).await {
-                    Ok(pr) => Some(pr),
-                    Err(e) => {
-                        error!("Unable to get pull {:?}", e.error_message());
-
-                        None
-                    }
-                };
+            let full_pr: Option<PullRequest> = match gh.get_pull(&repo, pull_request.number).await {
+                Ok(pr) => {
+                    info!("A matching Pull request already exists");
+                    Some(pr)
+                }
+                Err(e) => {
+                    error!("Unable to get pull {:?}", e.error_message());
+                    None
+                }
+            };
             full_pr
         }
         None => {
-            if args.create {
+            if args.create_pulls {
                 return match gh
-                    .create_pull(&repo_name, &args.from, &args.to, &args.reference)
+                    .create_pull(&repo, &args.from, &args.to, &args.reference)
                     .await
                 {
                     Ok(new_pull_request) => Some(new_pull_request),
@@ -107,11 +109,11 @@ async fn get_or_create_pull_request(
 }
 
 async fn merge_and_delete(gh: &Github, pr: &PullRequest, args: &Aargs) {
-    let repo_name: String = pr.base.repo.as_ref().unwrap().name.clone();
+    let repo: &Repo = pr.base.repo.as_ref().unwrap();
 
     info!(
         "Merging {} into {} for {}",
-        pr.head.label, pr.base.label, repo_name
+        pr.head.label, pr.base.label, repo.name
     );
 
     debug!("is mergeable ? {:?}", pr.mergeable.unwrap_or(false));
@@ -119,33 +121,26 @@ async fn merge_and_delete(gh: &Github, pr: &PullRequest, args: &Aargs) {
     match pr.mergeable {
         Some(mergeable) => {
             if mergeable {
-                let merge_status = gh.merge_pull(&repo_name, pr).await;
+                let merge_status = gh.merge_pull(repo, pr).await;
                 match merge_status {
                     Ok(merge_status) => {
                         if merge_status.merged == true && args.delete_branches {
-                            match gh.delete_reference(&repo_name, &args.from).await {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    error!(
-                                        "Failed to delete branch {}. reason: {}",
-                                        args.from,
-                                        e.error_message()
-                                    );
-                                    match e.extra_info() {
-                                        Some(extra_info) => {
-                                            debug!("original response: {:?}", extra_info)
-                                        }
-                                        None => {}
-                                    }
+                            if let Err(e) = gh.delete_reference(repo, &args.from).await {
+                                error!(
+                                    "Failed to delete branch {}. reason: {}",
+                                    args.from,
+                                    e.error_message()
+                                );
+                                if let Some(extra_info) = e.extra_info() {
+                                    debug!("original response: {:?}", extra_info)
                                 }
                             }
                         }
                     }
                     Err(e) => {
                         error!("Failed to merge #{}, {}", pr.number, e.error_message());
-                        match e.extra_info() {
-                            Some(extra_info) => debug!("original response: {:?}", extra_info),
-                            None => {}
+                        if let Some(extra_info) = e.extra_info() {
+                            debug!("original response: {:?}", extra_info);
                         }
                     }
                 }
@@ -176,94 +171,142 @@ async fn main() {
     let gh = Github::new(config.token, config.org_name.clone());
 
     for repo_name in config.repos {
-        let branches: Vec<Branch> = match gh.list_branches(&repo_name).await {
+        let repo = match gh.get_repo(&repo_name).await {
+            Ok(repo) => repo,
+            Err(e) => {
+                warn!("Unable to get repo {repo_name}: {:?}", e.error_message());
+                if let Some(extra_info) = e.extra_info() {
+                    debug!("{extra_info}");
+                }
+                continue;
+            }
+        };
+
+        info!("Processing repo: {}", repo.name);
+
+        let branches: Vec<Branch> = match gh.list_branches(&repo).await {
             Ok(branches) => branches,
             Err(e) => {
                 error!(
                     "Couldn't get branches for repo {:?}, error: {}. Skipping ...",
-                    &repo_name,
+                    &repo.name,
                     e.error_message()
                 );
 
-                match e.extra_info() {
-                    Some(extra_info) => debug!("{}", extra_info),
-                    _ => {
-                        //
-                    }
+                if let Some(extra_info) = e.extra_info() {
+                    debug!("{}", extra_info);
                 }
+
                 // TODO: should we skip or abort ?
                 continue;
             }
         };
 
         for branch in branches.iter() {
-            debug!("branch: {}", branch.name);
+            debug!("{}, branch: {}", repo.name, branch.name);
         }
 
         if !check_branch_in(&args.from, &branches) {
             error!(
                 "Source Branch {} doesn't exist for repo {}",
-                args.from, repo_name
+                args.from, repo.name
             );
         }
 
-        if !check_branch_in(&args.to, &branches) {
-            if args.create_branches {
-                // TODO
-                error!(
-                    "Destination Branch `{}` doesn't exist for repo `{}`.",
-                    args.to, repo_name
-                );
+        if args.create_branches {
+            //
+            if check_branch_in(&args.to, &branches) {
+                if !args.create_pulls {
+                    info!(
+                        r#"Destination Branch `{}` already exists for repo `{}`.
+                Use --create-pulls to create pull requests and update it."#,
+                        args.to, repo.name
+                    );
+                }
             } else {
-                error!(
-                    r#"Destination Branch `{}` doesn't exist for repo `{}`.
-                Use --create-branches to create it or create it manually on gh."#,
-                    args.to, repo_name
-                );
+                let from_ref = match gh.get_reference(&repo, &args.from).await {
+                    Ok(from_ref) => from_ref,
+                    Err(e) => {
+                        error!(
+                            "Unable to get reference {}: {:?}",
+                            args.from,
+                            e.error_message()
+                        );
+                        continue;
+                    }
+                };
 
-                std::process::exit(exitcode::CONFIG);
+                match gh.create_reference(&repo, &args.to, &from_ref).await {
+                    Ok(_) => {
+                        info!("Branch `{}` created successfully on {}", args.to, repo.name);
+                        // branch newly created, no need to create a pull request
+                        continue;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Error on creating branch `{}` for `{}`: {}",
+                            args.to,
+                            repo.name,
+                            e.error_message()
+                        );
+                    }
+                };
             }
         }
 
-        let comp = match gh.compare_branches(&repo_name, &args.to, &args.from).await {
-            Ok(comp) => comp,
-            Err(e) => {
-                error!(
-                    "Unable to get comparison between {} and {} : {}",
-                    args.to,
-                    args.from,
-                    e.error_message()
-                );
-                match e.extra_info() {
-                    Some(extra_info) => debug!("{}", extra_info),
-                    None => {}
-                };
-                std::process::exit(-1);
-            }
-        };
+        if !check_branch_in(&args.to, &branches) {
+            error!(
+                r#"Destination Branch `{}` doesn't exist for repo `{}`.
+                Use --create-branches to create it or create it manually on gh."#,
+                args.to, repo.name
+            );
+            continue;
+        }
 
-        let pull_request: Option<PullRequest> = match comp.status {
-            CompareStatus::Behind | CompareStatus::Diverged => {
-                get_or_create_pull_request(&gh, &repo_name, config.org_name.clone(), &args).await
-            }
-            _ => {
-                info!("Nothing to merge !");
-                None
-            }
-        };
+        let mut pull_request: Option<PullRequest> = None;
 
-        debug!("PR: {:?}", pull_request.clone().unwrap().title);
-
-        match pull_request {
-            Some(pr) => {
-                if !args.merge {
-                    info!("Merge not requested, nothing to do !");
-                    std::process::exit(0);
+        if args.create_pulls {
+            //
+            info!("Comparing {} and {} for PR", args.to, args.from);
+            let comp = match gh.compare_branches(&repo, &args.to, &args.from).await {
+                Ok(comp) => comp,
+                Err(e) => {
+                    error!(
+                        "Unable to get comparison between {} and {} : {}",
+                        args.to,
+                        args.from,
+                        e.error_message()
+                    );
+                    if let Some(extra_info) = e.extra_info() {
+                        debug!("{}", extra_info);
+                    }
+                    continue;
                 }
+            };
+
+            info!("`{}` is {:?} to `{}`", args.to, comp.status, args.from);
+            pull_request = match comp.status {
+                CompareStatus::Behind | CompareStatus::Diverged => {
+                    info!(
+                        "Creating pull request from {} into {} for {}",
+                        args.from, args.to, repo.name
+                    );
+                    get_or_create_pull_request(&gh, &repo, config.org_name.clone(), &args).await
+                }
+                _ => {
+                    info!("Nothing to merge !");
+                    None
+                }
+            };
+        }
+
+        if args.merge {
+            if let Some(pr) = pull_request {
+                // merge
+                info!("Merging {} for {}", pr.title, repo.name);
                 merge_and_delete(&gh, &pr, &args).await;
-            }
-            None => {
-                //
+            } else {
+                info!("No pull requests to merge for {}", repo.name);
             }
         }
     }
