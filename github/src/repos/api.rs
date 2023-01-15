@@ -36,11 +36,12 @@ impl Github {
 
     pub async fn list_repos(
         &self,
+        owner: &String,
         is_user: &Option<bool>,
     ) -> Result<Vec<Repo>, Box<dyn GithubAPIError>> {
-        let mut endpoint = format!("orgs/{}/repos", self.owner);
+        let mut endpoint = format!("orgs/{owner}/repos");
         if is_user.unwrap_or(false) {
-            endpoint = format!("users/{}/repos", self.owner);
+            endpoint = format!("users/{owner}/repos");
         }
 
         match self.get(endpoint, None).await {
