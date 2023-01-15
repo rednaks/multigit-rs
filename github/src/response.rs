@@ -6,10 +6,12 @@ use crate::users::response::User;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct GithubPlan {
-    pub collaborators: u32,
+    pub collaborators: Option<u32>,
     pub name: String,
     pub space: u32,
     pub private_repos: u32,
+    pub filled_seats: Option<u32>,
+    pub seats: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
