@@ -1,6 +1,7 @@
 pub mod branches;
 pub mod commits;
 mod github;
+pub mod orgs;
 pub mod pulls;
 pub mod references;
 pub mod repos;
