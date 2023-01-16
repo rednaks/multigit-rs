@@ -7,3 +7,8 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.2.1"
+github = { version = "0.1.0", path = "../github" }
+config = { version = "0.1.0", path = "../config" }
+web-common = { version = "0.1.0", path = "../web-common" }
+log = "0.4.17"
+actix-cors = "0.6.4"
