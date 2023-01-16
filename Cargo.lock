@@ -2272,6 +2272,9 @@ dependencies = [
  "config",
  "github",
  "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
  "web-common",
 ]
 
