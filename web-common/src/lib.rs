@@ -35,3 +35,19 @@ impl OrgResponse {
         }
     }
 }
+
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
+pub struct Repo {
+    pub name: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
+pub struct RepoResponse {
+    pub name: String,
+}
+
+impl RepoResponse {
+    pub fn of(repo: Repo) -> RepoResponse {
+        RepoResponse { name: repo.name }
+    }
+}
