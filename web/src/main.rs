@@ -6,12 +6,12 @@ use github::repos::response::Repo;
 use github::users::response::User;
 use github::Github;
 use log::error;
-use log::info;
-use web_common::OrgResponse;
+use web_common::{OrgResponse, OrgType};
 
 struct AppState {
     gh: Github,
 }
+
 #[get("/api/orgs")]
 async fn root(data: web::Data<AppState>) -> impl Responder {
     let orgs: Vec<Org> = match data.gh.get_my_orgs().await {
@@ -22,18 +22,34 @@ async fn root(data: web::Data<AppState>) -> impl Responder {
         }
     };
 
-    let orgs_response: Vec<OrgResponse> = orgs
+    let me: Option<User> = match data.gh.get_me().await {
+        Ok(user) => Some(user),
+        Err(_) => None,
+    };
+
+    let mut orgs_response: Vec<OrgResponse> = orgs
         .iter()
         .map(|o| OrgResponse {
             login: o.login.clone(),
+            org_type: OrgType::Organization,
         })
         .collect();
+
+    if let Some(user) = me {
+        orgs_response.insert(
+            0,
+            OrgResponse {
+                login: user.login.clone(),
+                org_type: OrgType::User,
+            },
+        );
+    }
+
     HttpResponse::Ok().json(orgs_response)
 }
 
-#[get("/org/{org}")]
+#[get("/api/orgs/{org}")]
 async fn manage_org(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
-    todo!();
     let org_name: String = path.into_inner();
 
     println!("Managing: {}", org_name);
