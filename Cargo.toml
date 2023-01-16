@@ -3,5 +3,7 @@ members = [
   "github",
   "config",
   "cli",
-  "web"
+  "web",
+  "web-common",
+  "web-front"
 ]
