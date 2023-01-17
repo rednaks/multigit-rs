@@ -3,7 +3,7 @@ members = [
   "github",
   "config",
   "cli",
-  "web",
+  "web-apis",
   "web-common",
   "web-front"
 ]
