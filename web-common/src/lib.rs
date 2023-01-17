@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 // org
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum OrgType {
     User,
     Organization,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 pub struct Org {
     pub login: String,
     #[serde(rename = "type")]

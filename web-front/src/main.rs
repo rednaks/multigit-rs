@@ -30,6 +30,8 @@ fn Menu() -> Html {
     let selected_org: UseStateHandle<Option<String>> = use_state(|| None);
     let (app_state, dispatch) = use_store::<AppState>();
 
+    let navigator = use_navigator().unwrap();
+
     {
         let dispatch = dispatch.clone();
         use_effect_with_deps(
@@ -70,6 +72,7 @@ fn Menu() -> Html {
             let select_element = target.and_then(|t| t.dyn_into::<HtmlSelectElement>().ok());
             if let Some(sel) = select_element {
                 selected_org.set(Some(sel.value()));
+                navigator.push(&Route::ManageOrg { org: sel.value() })
             } else {
                 selected_org.set(None);
             }
