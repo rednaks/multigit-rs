@@ -1,10 +1,11 @@
-use gloo_net::{http::Request, Error};
+use gloo_net::http::Request;
 use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlSelectElement};
 use yew::html;
 use yew::prelude::*;
 use yew::Html;
 use yew_router::prelude::*;
+use yewdux::prelude::*;
 
 use web_common::Org;
 
@@ -12,20 +13,25 @@ use web_common::Org;
 enum Route {
     #[at("/")]
     Home,
-    #[at("/manage/:login")]
-    ManageOrg { login: String },
+    #[at("/manage/:org")]
+    ManageOrg { org: String },
     #[not_found]
     #[at("/404")]
     NotFound,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Store)]
+struct AppState {
+    orgs: Option<Vec<Org>>,
+}
+
 #[function_component]
 fn Menu() -> Html {
     let selected_org: UseStateHandle<Option<String>> = use_state(|| None);
-    let orgs: UseStateHandle<Option<Vec<Org>>> = use_state(|| None);
+    let (app_state, dispatch) = use_store::<AppState>();
 
     {
-        let orgs = orgs.clone();
+        let dispatch = dispatch.clone();
         use_effect_with_deps(
             move |_| {
                 wasm_bindgen_futures::spawn_local(async move {
@@ -37,7 +43,8 @@ fn Menu() -> Html {
                         Ok(response) => {
                             let json = response.json::<Vec<Org>>().await;
                             match json {
-                                Ok(json_resp) => orgs.set(Some(json_resp)),
+                                Ok(json_resp) => dispatch
+                                    .reduce_mut(|app_state| app_state.orgs = Some(json_resp)),
                                 Err(_) => {
                                     //
                                 }
@@ -70,7 +77,7 @@ fn Menu() -> Html {
     };
 
     let build_select_options = || -> Html {
-        match orgs.as_ref() {
+        match app_state.orgs.as_ref() {
             Some(orgs) => orgs
                 .into_iter()
                 .map(|org| {
@@ -103,17 +110,17 @@ fn Menu() -> Html {
 
     }
 }
+
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <Menu/> },
-        Route::ManageOrg { login } => html! { {format!("Fetching repos for org: {}", login)}
+        Route::ManageOrg { org } => html! { {format!("Fetching repos for org: {}", org)}
             //
         },
         Route::NotFound => html! { <h1> {"404"}</h1>},
     }
 }
 
-//#[function_component(Main)]
 #[function_component]
 fn App() -> Html {
     html! {
