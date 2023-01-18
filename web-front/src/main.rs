@@ -1,4 +1,6 @@
 use gloo_net::http::Request;
+use stylist::yew::styled_component;
+use stylist::{style, Style};
 use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlSelectElement};
 use yew::html;
@@ -7,7 +9,7 @@ use yew::Html;
 use yew_router::prelude::*;
 use yewdux::prelude::*;
 
-use web_common::Org;
+use web_common::{Org, Repo};
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -23,11 +25,11 @@ enum Route {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Store)]
 struct AppState {
     orgs: Option<Vec<Org>>,
+    selected_org: Option<Org>,
 }
 
 #[function_component]
 fn Menu() -> Html {
-    let selected_org: UseStateHandle<Option<String>> = use_state(|| None);
     let (app_state, dispatch) = use_store::<AppState>();
 
     let navigator = use_navigator().unwrap();
@@ -62,19 +64,24 @@ fn Menu() -> Html {
     }
 
     let onchange = {
-        let selected_org = selected_org.clone();
+        let dispatch = dispatch.clone();
         Callback::from(move |evt: Event| {
-            web_sys::console::log_1(&format!("{:?}", selected_org).into());
-            web_sys::console::log_1(&format!("{:?}", evt).into());
-
             let target: Option<EventTarget> = evt.target();
 
             let select_element = target.and_then(|t| t.dyn_into::<HtmlSelectElement>().ok());
             if let Some(sel) = select_element {
-                selected_org.set(Some(sel.value()));
+                dispatch.reduce_mut(|app_state| {
+                    app_state.selected_org = app_state
+                        .orgs
+                        .clone()
+                        .unwrap()
+                        .into_iter()
+                        .find(|o| o.login == sel.value());
+                });
+
                 navigator.push(&Route::ManageOrg { org: sel.value() })
             } else {
-                selected_org.set(None);
+                dispatch.reduce_mut(|app_state| app_state.selected_org = None);
             }
         })
     };
@@ -96,9 +103,9 @@ fn Menu() -> Html {
     html! {
     <>
         {
-            if let Some(org) = selected_org.as_ref() {
+            if let Some(org) = app_state.selected_org.clone() {
                 html! {
-                    <p>{"You are managing "} <strong>{org}</strong> {". Switch org:"}</p>
+                    <p>{"You are managing "} <strong>{org.login}</strong> {". Switch org:"}</p>
                 }
             } else {
                 html! {
@@ -114,12 +121,124 @@ fn Menu() -> Html {
     }
 }
 
+#[derive(Properties, PartialEq)]
+pub struct ManageOrgProps {
+    pub org: String,
+}
+
+#[styled_component(ManageOrgComp)]
+fn manage_org_comp(props: &ManageOrgProps) -> Html {
+    let (app_state, dispatch) = use_store::<AppState>();
+    let repos: UseStateHandle<Option<Vec<Repo>>> = use_state(|| None);
+
+    {
+        let repos = repos.clone();
+        let dispatch = dispatch.clone();
+        let org = props.org.clone();
+        let capp_state = app_state.clone();
+        use_effect_with_deps(
+            move |_| {
+                match capp_state.selected_org {
+                    Some(_) => {}
+                    None => wasm_bindgen_futures::spawn_local(async move {
+                        let selected_org = Request::get(
+                            format!("{}/api/orgs/{}", "http://127.0.0.1:8000", org).as_str(),
+                        )
+                        .send()
+                        .await;
+
+                        match selected_org {
+                            Ok(response) => {
+                                //
+                                match response.json().await {
+                                    Ok(an_org) => dispatch.reduce_mut(|app_state| {
+                                        app_state.selected_org = Some(an_org)
+                                    }),
+                                    Err(_) => {
+                                        return;
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                return;
+                            }
+                        }
+                    }),
+                };
+
+                if capp_state.selected_org.is_none() {
+                    return;
+                }
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    let fetched_repos = Request::get(
+                        format!(
+                            "{}/api/orgs/{}/repos",
+                            "http://127.0.0.1:8000",
+                            capp_state.selected_org.clone().unwrap().login
+                        )
+                        .as_str(),
+                    )
+                    .query([(
+                        "type",
+                        capp_state
+                            .selected_org
+                            .clone()
+                            .unwrap()
+                            .org_type
+                            .to_string(),
+                    )])
+                    .send()
+                    .await;
+                    match fetched_repos {
+                        Ok(response) => match response.json::<Vec<Repo>>().await {
+                            Ok(json_resp) => repos.set(Some(json_resp)),
+                            Err(_) => {}
+                        },
+                        Err(_) => {}
+                    };
+                });
+            },
+            app_state,
+        );
+    }
+
+    let build_repos = || -> Html {
+        match repos.as_ref() {
+            Some(repos) => repos
+                .into_iter()
+                .map(|repo| {
+                    html! {
+                        <div class={"repo"} value={repo.name.clone()}>{repo.name.clone()}</div>
+                    }
+                })
+                .collect::<Html>(),
+            None => html! {},
+        }
+    };
+
+    let style = style! {
+        r#"
+        display: flex;
+        .repo {
+            margin: 10px;
+        }
+        "#
+    };
+    html! {
+        <>
+            {format!("Repos for org: {}", props.org)}
+            <div class={style.unwrap()}>
+            {build_repos()}
+            </div>
+        </>
+    }
+}
+
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <Menu/> },
-        Route::ManageOrg { org } => html! { {format!("Fetching repos for org: {}", org)}
-            //
-        },
+        Route::ManageOrg { org } => html! { <ManageOrgComp {org}/>},
         Route::NotFound => html! { <h1> {"404"}</h1>},
     }
 }
@@ -127,9 +246,11 @@ fn switch(routes: Route) -> Html {
 #[function_component]
 fn App() -> Html {
     html! {
-        <BrowserRouter>
-            <Switch<Route> render={switch} />
-        </BrowserRouter>
+        <div>
+            <BrowserRouter>
+                <Switch<Route> render={switch} />
+            </BrowserRouter>
+        </div>
     }
 }
 

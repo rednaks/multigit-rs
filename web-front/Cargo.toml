@@ -17,3 +17,4 @@ yew = { version = "0.20.0", features = ["csr"] }
 yew-router = "0.17.0"
 web-common = {version = "0.1.0", path="../web-common/"}
 yewdux = "0.9.0"
+stylist = { version = "0.11.0", features = ["yew"] }

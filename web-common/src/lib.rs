@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use strum_macros::Display;
 
 // org
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, Display)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "snake_case")]
 pub enum OrgType {
     User,
     Organization,
