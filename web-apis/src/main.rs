@@ -55,7 +55,7 @@ pub struct OrgInfo {
     pub org_type: OrgType,
 }
 
-#[get("/api/orgs/{org}")]
+#[get("/api/orgs/{org}/repos")]
 async fn manage_org(
     data: web::Data<AppState>,
     path: web::Path<String>,
@@ -84,6 +84,37 @@ async fn manage_org(
     HttpResponse::Ok().json(repo_response)
 }
 
+#[get("/api/orgs/{org}")]
+async fn get_org(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
+    let org_name: String = path.into_inner();
+
+    println!("Getting: {}", org_name);
+
+    let org_response: OrgResponse = match data.gh.get_org(&org_name).await {
+        Ok(org) => OrgResponse {
+            login: org.login,
+            org_type: OrgType::Organization,
+        },
+        Err(e) => {
+            println!("Maybe not an org ? : {}", e.error_message());
+            // try user:
+            // todo: handle not me.
+            match data.gh.get_me().await {
+                Ok(user) => OrgResponse {
+                    login: user.login,
+                    org_type: OrgType::User,
+                },
+                Err(_) => {
+                    println!("{org_name} Not found");
+                    return HttpResponse::NotFound().body("Not found");
+                }
+            }
+        }
+    };
+
+    HttpResponse::Ok().json(org_response)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = match load_config() {
@@ -106,6 +137,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .service(root)
             .service(manage_org)
+            .service(get_org)
     })
     .bind(("127.0.0.1", 8000))?
     .run()
