@@ -43,7 +43,7 @@ pub fn Nav() -> Html {
         );
     }
 
-    let onchange = {
+    let onclick = {
         let dispatch = dispatch.clone();
         Callback::from(move |evt: Event| {
             let target: Option<EventTarget> = evt.target();
@@ -66,20 +66,21 @@ pub fn Nav() -> Html {
         })
     };
 
-    /* value={org.login.clone()}>{org.login.clone()}</option> */
-    let build_select_options = || -> Html {
+    let build_dropdown_items = || -> Html {
         match app_state.orgs.as_ref() {
             Some(orgs) => orgs
                 .into_iter()
                 .map(|org| {
-                    if app_state.selected_org.clone().unwrap().login == org.login.clone() {
+                    if app_state.selected_org.clone().is_some()
+                        && app_state.selected_org.clone().unwrap().login == org.login.clone()
+                    {
                         html! {
                             <a class={"dropdown-item is-active"}>{org.login.clone()}</a>
 
                         }
                     } else {
                         html! {
-                            <a class={"dropdown-item"}>{org.login.clone()}</a>
+                            <ybc::Button classes={"dropdown-item"}>{org.login.clone()}</ybc::Button>
                         }
                     }
                 })
@@ -95,9 +96,22 @@ pub fn Nav() -> Html {
         <ybc::Navbar
             classes={classes!("is-success")}
             navbrand={html!{
-                <ybc::NavbarItem>
-                    <ybc::Title classes={classes!("has-text-white")} size={ybc::HeaderSize::Is4}>{"MultiGitRs"}</ybc::Title>
-                </ybc::NavbarItem>
+                <>
+                    <ybc::NavbarItem>
+                        <ybc::Title classes={classes!("has-text-white")} size={ybc::HeaderSize::Is4}>{"MultiGitRs"}</ybc::Title>
+                    </ybc::NavbarItem>
+                    <ybc::NavbarItem>
+                        <ybc::Dropdown button_html={
+                            if app_state.selected_org.is_some() {
+                                html!{{app_state.selected_org.clone().unwrap().login}}
+                            } else {
+                                html!{"Loading"}
+                            }
+                        }>
+                            {build_dropdown_items()}
+                        </ybc::Dropdown>
+                    </ybc::NavbarItem>
+                </>
             }}
         />
        </>
