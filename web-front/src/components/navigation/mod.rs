@@ -82,6 +82,14 @@ pub fn Nav() -> Html {
 
     html! {
     <>
+        <ybc::Navbar
+            classes={classes!("is-success")}
+            navbrand={html!{
+                <ybc::NavbarItem>
+                    <ybc::Title classes={classes!("has-text-white")} size={ybc::HeaderSize::Is4}>{"MultiGitRs"}</ybc::Title>
+                </ybc::NavbarItem>
+            }}
+        />
         {
             if let Some(org) = app_state.selected_org.clone() {
                 html! {

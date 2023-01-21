@@ -8,10 +8,11 @@ use yew_router::prelude::*;
 pub fn app() -> Html {
     html! {
         <>
-            <h1>{"MultiGitRs"}</h1>
             <BrowserRouter>
                 <Nav></Nav>
-                <Switch<Route> render={switch}/>
+                <ybc::Container fluid=true>
+                    <Switch<Route> render={switch}/>
+                </ybc::Container>
             </BrowserRouter>
         </>
     }

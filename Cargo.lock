@@ -878,7 +878,7 @@ dependencies = [
  "gloo-storage",
  "gloo-timers",
  "gloo-utils",
- "gloo-worker",
+ "gloo-worker 0.2.1",
 ]
 
 [[package]]
@@ -1009,6 +1009,23 @@ dependencies = [
  "js-sys",
  "serde",
  "serde_json",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "gloo-worker"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09110b5555bcafe508cee0fb94308af9aac7a85f980d3c88b270d117c6c6911d"
+dependencies = [
+ "anymap2",
+ "bincode",
+ "gloo-console",
+ "gloo-utils",
+ "js-sys",
+ "serde",
+ "slab",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -2467,6 +2484,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-common",
  "web-sys",
+ "ybc",
  "yew",
  "yew-router",
  "yewdux",
@@ -2623,6 +2641,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ybc"
+version = "0.4.0-alpha.0"
+source = "git+https://github.com/rednaks/ybc?branch=alpha-v0.4#ea3dd58f707c0fb466b4274a2b53061b8e9a8fb7"
+dependencies = [
+ "derive_more",
+ "serde",
+ "wasm-bindgen",
+ "web-sys",
+ "yew",
+ "yew-agent",
+ "yew-router",
+]
+
+[[package]]
 name = "yew"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2645,6 +2677,16 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "yew-macro",
+]
+
+[[package]]
+name = "yew-agent"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b06f7c5ed97fff22816bb00d3d82ebc0fc1119d7bbb9e07e62c0d2853f51920a"
+dependencies = [
+ "gloo-worker 0.1.2",
+ "yew",
 ]
 
 [[package]]
