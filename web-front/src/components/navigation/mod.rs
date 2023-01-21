@@ -66,17 +66,27 @@ pub fn Nav() -> Html {
         })
     };
 
+    /* value={org.login.clone()}>{org.login.clone()}</option> */
     let build_select_options = || -> Html {
         match app_state.orgs.as_ref() {
             Some(orgs) => orgs
                 .into_iter()
                 .map(|org| {
-                    html! {
-                        <option value={org.login.clone()}>{org.login.clone()}</option>
+                    if app_state.selected_org.clone().unwrap().login == org.login.clone() {
+                        html! {
+                            <a class={"dropdown-item is-active"}>{org.login.clone()}</a>
+
+                        }
+                    } else {
+                        html! {
+                            <a class={"dropdown-item"}>{org.login.clone()}</a>
+                        }
                     }
                 })
                 .collect::<Html>(),
-            None => html! {},
+            None => html! {
+                <a class={"dropdown-item"}>{"loading"}</a>
+            },
         }
     };
 
@@ -90,20 +100,6 @@ pub fn Nav() -> Html {
                 </ybc::NavbarItem>
             }}
         />
-        {
-            if let Some(org) = app_state.selected_org.clone() {
-                html! {
-                    <p>{"You are managing "} <strong>{org.login}</strong> {". Switch org:"}</p>
-                }
-            } else {
-                html! {
-                    <p>{ "Select an org" }</p>
-                }
-            }
-        }
-        <select {onchange}>
-         {build_select_options()}
-        </select>
-    </>
+       </>
     }
 }
