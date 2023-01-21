@@ -80,7 +80,7 @@ pub fn Nav() -> Html {
                         }
                     } else {
                         html! {
-                            <ybc::Button classes={"dropdown-item"}>{org.login.clone()}</ybc::Button>
+                            <a href={format!("/manage/org/{}", org.login.clone())} class={"dropdown-item"}>{org.login.clone()}</a>
                         }
                     }
                 })
