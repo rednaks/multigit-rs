@@ -19,7 +19,9 @@ pub fn Home() -> Html {
                                     <ybc::Title>{org.login.clone()}</ybc::Title>
                                 </ybc::CardContent>
                                 <ybc::CardFooter>
-                                        <ybc::Button classes={"card-footer-item"}>{"Manage"}</ybc::Button>
+                                        <a href={format!("/manage/org/{}", org.login.clone())} class={"card-footer-item button"}>
+                                        {"Manage"}
+                                        </a>
                                 </ybc::CardFooter>
                             </ybc::Card>
                         </ybc::Column>
