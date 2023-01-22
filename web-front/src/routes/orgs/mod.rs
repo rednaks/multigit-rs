@@ -96,7 +96,18 @@ pub fn ManageOrgs(props: &ManageOrgProps) -> Html {
                 .into_iter()
                 .map(|repo| {
                     html! {
-                        <div class={"repo"} value={repo.name.clone()}>{repo.name.clone()}</div>
+                        <ybc::Column classes={"is-one-quarter"}>
+                            <ybc::Card>
+                                <ybc::CardContent>
+                                    <ybc::Title>{repo.name.clone()}</ybc::Title>
+                                </ybc::CardContent>
+                                <ybc::CardFooter>
+                                        <a href={format!("#{}", repo.name.clone())} class={"card-footer-item button"}>
+                                        {"Manage"}
+                                        </a>
+                                </ybc::CardFooter>
+                            </ybc::Card>
+                        </ybc::Column>
                     }
                 })
                 .collect::<Html>(),
