@@ -126,9 +126,9 @@ pub fn ManageOrgs(props: &ManageOrgProps) -> Html {
     html! {
         <>
             {format!("Repos for org: {}", props.org)}
-            <div class={style.unwrap()}>
+            <ybc::Columns multiline={true}>
             {build_repos()}
-            </div>
+            </ybc::Columns>
         </>
     }
 }
